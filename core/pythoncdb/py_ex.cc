@@ -29,6 +29,9 @@
 #include <ios>
 #include <iomanip>
 
+#include "../properties/Weight.hh"
+#include "../properties/WeightInherit.hh"
+
 // #define DEBUG 1
 
 namespace cadabra {
@@ -130,7 +133,18 @@ namespace cadabra {
 			return ret;
 			}
 		}
-	
+
+	Ex_ptr Ex_join(const std::vector<Ex_ptr>& ex) {
+		if (ex.size() < 2) {
+			throw std::invalid_argument("Ex_join requires at least two arguments.");
+			}
+		Ex_ptr joined = Ex_join(ex[0], ex[1]);
+		for (size_t i = 2; i < ex.size(); ++i) {
+			joined = Ex_join(joined, ex[i]);
+			}
+		return joined;
+		}
+
 	Ex_ptr Ex_mul(const Ex_ptr ex1, const Ex_ptr ex2)
 		{
 		return Ex_mul(ex1, ex2, ex2->begin());
@@ -338,6 +352,40 @@ namespace cadabra {
 		ex->print_entire_tree(str);
 		return str.str();
 		}
+
+	multiplier_t get_weight(const Ex *ex, const std::string& label)
+	{
+		auto it = ex->begin();
+		const Kernel *kernel = get_kernel_from_scope();
+		const WeightInherit *gmn =kernel->properties.get<WeightInherit>(it, label);
+		if(gmn) {
+			return gmn->value(*kernel, it, label);
+		} else {
+			const Weight *wgh =kernel->properties.get<Weight>(it, label);
+			if (wgh) {
+				return wgh->value(*kernel, it, label);
+			} else {
+				return 0;
+			}
+		}
+	}
+
+	multiplier_t get_weight(const ExNode& node, const std::string& label)
+	{
+		auto it = node.it;
+		const Kernel *kernel = get_kernel_from_scope();
+		const WeightInherit *gmn =kernel->properties.get<WeightInherit>(it, label);
+		if(gmn) {
+			return gmn->value(*kernel, it, label);
+		} else {
+			const Weight *wgh =kernel->properties.get<Weight>(it, label);
+			if (wgh) {
+				return wgh->value(*kernel, it, label);
+			} else {
+				return 0;
+			}
+		}
+	}
 
 	Ex lhs(Ex_ptr ex)
 		{
@@ -689,8 +737,35 @@ namespace cadabra {
 		.def("from_sympy", &sympy::SympyBridge::import_ex)
 		;
 
-		m.def("join", &Ex_join);
+		m.def("join", [](const Ex_ptr ex1, const Ex_ptr ex2, py::args args) {
+	        std::vector<Ex_ptr> ex = {ex1, ex2};
+        	for (const auto& arg : args) {
+	            ex.push_back(arg.cast<Ex_ptr>());
+        	}
+        	return Ex_join(ex);
+    		});
+
 		m.def("tree", &print_tree);
+
+		m.def("get_weight", [](const Ex *ex, Ex_ptr arg) {
+				pybind11::object mpq = pybind11::module::import("gmpy2").attr("mpq");
+				auto m = get_weight(ex, Ex_as_input(arg));
+				pybind11::object mult = mpq(m.get_num().get_si(), m.get_den().get_si());
+				return mult;
+			},
+			pybind11::arg("ex"),
+			pybind11::arg("label") = Ex{}
+			);
+
+		m.def("get_weight", [](const ExNode& node, Ex_ptr arg) {
+				pybind11::object mpq = pybind11::module::import("gmpy2").attr("mpq");
+				auto m = get_weight(node, Ex_as_input(arg));
+				pybind11::object mult = mpq(m.get_num().get_si(), m.get_den().get_si());
+				return mult;
+			},
+			pybind11::arg("ex"),
+			pybind11::arg("label") = Ex{}
+			);
 
 		m.def("map_sympy", &map_sympy_wrapper,
 		      pybind11::arg("ex"),
