@@ -100,6 +100,7 @@ namespace cadabra {
 
    Ex_ptr Ex_join(const Ex_ptr ex1, const Ex_ptr ex2)
 		{
+		// DEPRECATED: no longer in use, can be removed
 		if (ex1->size() == 0) return ex2;
 		if (ex2->size() == 0) return ex1;
 
@@ -134,17 +135,18 @@ namespace cadabra {
 			}
 		}
 
-	Ex_ptr Ex_join(const std::vector<Ex_ptr>& ex) {
-		if (ex.size() < 2) {
-			throw std::invalid_argument("Ex_join requires at least two arguments.");
-			}
-		Ex_ptr joined = Ex_join(ex[0], ex[1]);
-		for (size_t i = 2; i < ex.size(); ++i) {
-			joined = Ex_join(joined, ex[i]);
-			}
-		return joined;
-		}
+   Ex_ptr Ex_join(std::vector<Ex_ptr> exs)
+		{
+		auto ret = std::make_shared<Ex>("\\comma");
 
+		for(const Ex_ptr& ex: exs) {
+			auto loc = ret->append_child(ret->begin(), ex->begin());
+			if(*ex->begin()->name=="\\comma") 
+				ret->flatten_and_erase(loc);
+			}
+		return ret;
+		}
+	
 	Ex_ptr Ex_mul(const Ex_ptr ex1, const Ex_ptr ex2)
 		{
 		return Ex_mul(ex1, ex2, ex2->begin());
@@ -738,10 +740,10 @@ namespace cadabra {
 		;
 
 		m.def("join", [](const Ex_ptr ex1, const Ex_ptr ex2, py::args args) {
-	        std::vector<Ex_ptr> ex = {ex1, ex2};
+			std::vector<Ex_ptr> ex = {ex1, ex2};
         	for (const auto& arg : args) {
-	            ex.push_back(arg.cast<Ex_ptr>());
-        	}
+				ex.push_back(arg.cast<Ex_ptr>());
+				}
         	return Ex_join(ex);
     		});
 
