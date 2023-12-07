@@ -531,6 +531,11 @@ namespace cadabra {
 		return mult;
 		}
 
+	size_t Ex_size(Ex_ptr ex)
+		{
+		return ex->size();
+		}
+
 	pybind11::list terms(Ex_ptr ex)
 		{
 		Ex::iterator it = ex->begin();
@@ -687,6 +692,7 @@ namespace cadabra {
 		.def("__int__", &Ex_int_cast)
 		.def("head", &Ex_head)
 		.def("mult", &Ex_get_mult)
+		.def("size", &Ex_size)
 		.def("__iter__", &Ex_iter)
 		.def("top", &Ex_top)
 		.def("matches", &Ex_matches)
