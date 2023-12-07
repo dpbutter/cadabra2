@@ -148,6 +148,10 @@ namespace cadabra {
 				}
 			}
 		// Note: ret could still \comma{} or \comma{x}
+		auto it = ret->begin();
+		if (ret->number_of_children(it) < 2) {
+			ret->flatten_and_erase(it);
+			}
 		return ret;
 		}
 	
