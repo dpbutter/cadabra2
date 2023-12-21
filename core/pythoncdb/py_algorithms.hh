@@ -31,7 +31,8 @@ namespace cadabra {
 		return ex;
 		}
 
-	// Overload apply_algo_base to deal with ExNodes
+	// A modified version of apply_algo_base to deal with ExNodes
+	// Pre_order behaviour remains unchanged
 	template <class Algo>
 	Ex_ptr apply_algo_base_node(Algo& algo, Ex_ptr ex, ExNode& node, bool deep, bool repeat, unsigned int depth, bool pre_order=false)
 		{
@@ -80,35 +81,35 @@ namespace cadabra {
 
 	// Add new apply_algo_node functions to work with ExNodes
 	template <class Algo>
-	Ex_ptr apply_algo_node(ExNode& exnode, bool deep, bool repeat, unsigned int depth)
+	Ex_ptr apply_algo_node(ExNode& node, bool deep, bool repeat, unsigned int depth)
 		{
-		Ex_ptr ex = exnode.ex;
+		Ex_ptr ex = node.ex;
 		Algo algo(*get_kernel_from_scope(), *ex);
-		return apply_algo_base_node(algo, ex, exnode, deep, repeat, depth, false);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, false);
 		}
 
 	template <class Algo, typename Arg1>
-	Ex_ptr apply_algo_node(ExNode& exnode, Arg1 arg1, bool deep, bool repeat, unsigned int depth)
+	Ex_ptr apply_algo_node(ExNode& node, Arg1 arg1, bool deep, bool repeat, unsigned int depth)
 		{
-		Ex_ptr ex = exnode.ex;
+		Ex_ptr ex = node.ex;
 		Algo algo(*get_kernel_from_scope(), *ex, arg1);
-		return apply_algo_base_node(algo, ex, exnode, deep, repeat, depth, false);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, false);
 		}
 
 	template <class Algo, typename Arg1, typename Arg2>
-	Ex_ptr apply_algo_node(ExNode& exnode, Arg1 arg1, Arg2 arg2, bool deep, bool repeat, unsigned int depth)
+	Ex_ptr apply_algo_node(ExNode& node, Arg1 arg1, Arg2 arg2, bool deep, bool repeat, unsigned int depth)
 		{
-		Ex_ptr ex = exnode.ex;
+		Ex_ptr ex = node.ex;
 		Algo algo(*get_kernel_from_scope(), *ex, arg1, arg2);
-		return apply_algo_base_node(algo, ex, exnode, deep, repeat, depth, false);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, false);
 		}
 
 	template <class Algo, typename Arg1, typename Arg2, typename Arg3>
-	Ex_ptr apply_algo_node(ExNode& exnode, Arg1 arg1, Arg2 arg2, Arg3 arg3, bool deep, bool repeat, unsigned int depth)
+	Ex_ptr apply_algo_node(ExNode& node, Arg1 arg1, Arg2 arg2, Arg3 arg3, bool deep, bool repeat, unsigned int depth)
 		{
-		Ex_ptr ex = exnode.ex;
+		Ex_ptr ex = node.ex;
 		Algo algo(*get_kernel_from_scope(), *ex, arg1, arg2, arg3);
-		return apply_algo_base_node(algo, ex, exnode, deep, repeat, depth, false);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, false);
 		}
 
 
@@ -182,6 +183,35 @@ namespace cadabra {
 		return apply_algo_base(algo, ex, deep, repeat, depth, true);
 		}
 
+	/************************************************************************************
+	// This code doesn't do anything yet, because of the way apply_pre_order works
+
+	template <class Algo>
+	Ex_ptr apply_algo_preorder_node(ExNode& node, bool deep, bool repeat, unsigned int depth)
+		{
+		Ex_ptr ex = node.ex;
+		Algo algo(*get_kernel_from_scope(), *ex);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, true);
+		}
+
+	template <class Algo, typename Arg1>
+	Ex_ptr apply_algo_preorder_node(ExNode& node, Arg1 arg1, bool deep, bool repeat, unsigned int depth)
+		{
+		Ex_ptr ex = node.ex;
+		Algo algo(*get_kernel_from_scope(), *ex, arg1);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, true);
+		}
+
+	template <class Algo, typename Arg1, typename Arg2>
+	Ex_ptr apply_algo_preorder_node(ExNode& node, Arg1 arg1, Arg2 arg2, bool deep, bool repeat, unsigned int depth)
+		{
+		Ex_ptr ex = node.ex;
+		Algo algo(*get_kernel_from_scope(), *ex, arg1, arg2);
+		return apply_algo_base_node(algo, ex, node, deep, repeat, depth, true);
+		}
+	//
+	************************************************************************************/
+
 	/// \ingroup pythoncore
 	///
 	/// Method to declare a Python function with variable number of arguments, and
@@ -201,6 +231,17 @@ namespace cadabra {
 		      pybind11::arg("depth") = depth,
 		      pybind11::doc(read_manual(m, "algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
+		/* Because of the way apply_pre_order is implemented, below doesn't do anything yet
+		m.def(name,
+		      &apply_algo_preorder_node<Algo, Args...>,
+		      pybind11::arg("node"),
+		      std::forward<PyArgs>(pyargs)...,
+		      pybind11::arg("deep") = deep,
+		      pybind11::arg("repeat") = repeat,
+		      pybind11::arg("depth") = depth,
+		      pybind11::doc(read_manual("algorithms", name).c_str()),
+		      pybind11::return_value_policy::reference_internal);
+		*/ 
 		}
 
 
