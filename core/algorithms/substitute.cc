@@ -13,7 +13,7 @@
 
 using namespace cadabra;
 
-substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
+substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial, bool skipchecks)
 	: Algorithm(k, tr), comparator(k.properties), args(args_), sort_product_(k, tr), partial(partial)
 	{
 	if(args.is_empty()) 
@@ -23,8 +23,9 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 	// sw.start();
 	cadabra::do_list(args, args.begin(), [&](Ex::iterator arrow) {
 		//args.print_recursive_treeform(std::cerr, arrow);
-		if(*arrow->name!="\\arrow" && *arrow->name!="\\equals")
-			throw ArgumentException("substitute: Argument is neither a replacement rule nor an equality.");
+		if (!skipchecks)
+			if(*arrow->name!="\\arrow" && *arrow->name!="\\equals")
+				throw ArgumentException("substitute: Argument is neither a replacement rule nor an equality.");
 
 		sibling_iterator lhs=args.begin(arrow);
 		sibling_iterator rhs=lhs;
@@ -39,34 +40,35 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 			}
 
 		try {
-			if(*lhs->multiplier!=1) {
-				throw ArgumentException("substitute: No numerical pre-factors allowed on lhs of replacement rule.");
-				}
-			// test validity of lhs and rhs
-			iterator lhsit=lhs, stopit=lhs;
-			stopit.skip_children();
-			++stopit;
-			while(lhsit!=stopit) {
-				if(lhsit->is_object_wildcard()) {
-					if(tr.number_of_children(lhsit)>0) {
-						throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
-						}
+			if (!skipchecks) {
+					if(*lhs->multiplier!=1) {
+					throw ArgumentException("substitute: No numerical pre-factors allowed on lhs of replacement rule.");
 					}
-				++lhsit;
-				}
-			lhsit=rhs;
-			stopit=rhs;
-			stopit.skip_children();
-			++stopit;
-			while(lhsit!=stopit) {
-				if(lhsit->is_object_wildcard()) {
-					if(tr.number_of_children(lhsit)>0) {
-						throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
+				// test validity of lhs and rhs
+				iterator lhsit=lhs, stopit=lhs;
+				stopit.skip_children();
+				++stopit;
+				while(lhsit!=stopit) {
+					if(lhsit->is_object_wildcard()) {
+						if(tr.number_of_children(lhsit)>0) {
+							throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
+							}
 						}
+					++lhsit;
 					}
-				++lhsit;
-				}
-
+				lhsit=rhs;
+				stopit=rhs;
+				stopit.skip_children();
+				++stopit;
+				while(lhsit!=stopit) {
+					if(lhsit->is_object_wildcard()) {
+						if(tr.number_of_children(lhsit)>0) {
+							throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
+							}
+						}
+					++lhsit;
+					}
+			}
 			// check whether there are dummies.
 			index_map_t ind_free, ind_dummy;
 			classify_indices(lhs, ind_free, ind_dummy);
