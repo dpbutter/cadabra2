@@ -7,7 +7,7 @@ namespace cadabra {
 
 	class sort_product : public Algorithm {
 		public:
-			sort_product(const Kernel&, Ex&);
+			sort_product(const Kernel&, Ex&, unsigned int algochoice = 0);
 
 			virtual bool     can_apply(iterator);
 			virtual result_t apply(iterator&);
@@ -17,6 +17,7 @@ namespace cadabra {
 		private:
 			//			bool ignore_numbers_;
 			bool cleanup;
+			unsigned int algochoice;
 		};
 
 	}

@@ -7,8 +7,8 @@ using namespace cadabra;
 
 // #define DEBUG 1
 
-sort_product::sort_product(const Kernel&k, Ex& tr)
-	: Algorithm(k, tr), cleanup(true)
+sort_product::sort_product(const Kernel&k, Ex& tr, unsigned int algochoice)
+	: Algorithm(k, tr), cleanup(true), algochoice(algochoice)
 	{
 	//	if(has_argument("IgnoreNumbers")) {
 	//		txtout << "ignoring numbers" << std::endl;
@@ -57,35 +57,135 @@ Algorithm::result_t sort_product::apply(iterator& st)
 	//	tr.print_recursive_treeform(std::cout, st);
 
 	unsigned int num=tr.number_of_children(st);
-	for(unsigned int i=1; i<num; ++i) {
-		one=tr.begin(st);
-		two=one;
-		++two;
-		//		for(unsigned int j=i+1; j<=num; ++j) { // this loops too many times, no?
-		while(two!=tr.end(st)) {
-			compare.clear();
-			auto es = compare.equal_subtree(one, two);
-			if(compare.should_swap(one, es)) {
-#ifdef DEBUG
-				std::cerr << "should swap " << *(one->name) << " with " << *(two->name) << std::endl;
-#endif
-				int canswap=compare.can_swap(one, two, es);
-#ifdef DEBUG
-				std::cerr << "can swap? " << *(one->name) << " with " << *(two->name) << std::endl;
-#endif
-				if(canswap!=0) {
-					// std::cerr << "swapping " << Ex(one) << " with " << Ex(two) << std::endl;
-					tr.swap(one);
-					std::swap(one,two);  // put the iterators back in order
-					if(canswap==-1) {
-						//						std::cout << "MINUS" << std::endl;
-						flip_sign(st->multiplier);
-						}
-					ret=result_t::l_applied;
-					}
-				}
-			++one;
+
+	if (algochoice == 0) {
+		for(unsigned int i=1; i<num; ++i) {
+			one=tr.begin(st);
+			two=one;
 			++two;
+			//		for(unsigned int j=i+1; j<=num; ++j) { // this loops too many times, no?
+			while(two!=tr.end(st)) {
+				compare.clear();
+				auto es = compare.equal_subtree(one, two);
+				if(compare.should_swap(one, es)) {
+	#ifdef DEBUG
+					std::cerr << "should swap " << *(one->name) << " with " << *(two->name) << std::endl;
+	#endif
+					int canswap=compare.can_swap(one, two, es);
+	#ifdef DEBUG
+					std::cerr << "can swap? " << *(one->name) << " with " << *(two->name) << std::endl;
+	#endif
+					if(canswap!=0) {
+						// std::cerr << "swapping " << Ex(one) << " with " << Ex(two) << std::endl;
+						tr.swap(one);
+						std::swap(one,two);  // put the iterators back in order
+						if(canswap==-1) {
+							//						std::cout << "MINUS" << std::endl;
+							flip_sign(st->multiplier);
+							}
+						ret=result_t::l_applied;
+						}
+					}
+				++one;
+				++two;
+				}
+			}
+		} 
+	else if (algochoice == 1) {
+		unsigned int upper_limit = num;
+
+		// swap_pos will eventually denote the larger index of the two items swapped
+		unsigned int swap_pos = 0;
+
+		while (upper_limit > 1) {
+			one=tr.begin(st);
+			two=one;
+			++two;
+
+			// swap_pos will eventually denote the larger index of the two items swapped
+			swap_pos = 0;
+
+			for (unsigned int j = 0; j < upper_limit-1 ; j++) {
+				compare.clear();
+				auto es = compare.equal_subtree(one, two);
+				if(compare.should_swap(one, es)) {
+	#ifdef DEBUG
+					std::cerr << "should swap " << *(one->name) << " with " << *(two->name) << std::endl;
+	#endif
+					int canswap=compare.can_swap(one, two, es);
+	#ifdef DEBUG
+					std::cerr << "can swap? " << *(one->name) << " with " << *(two->name) << std::endl;
+	#endif
+					if(canswap!=0) {
+						// std::cerr << "swapping " << Ex(one) << " with " << Ex(two) << std::endl;
+						tr.swap(one);
+						std::swap(one,two);  // put the iterators back in order
+						if(canswap==-1) {
+							//						std::cout << "MINUS" << std::endl;
+							flip_sign(st->multiplier);
+							}
+						ret=result_t::l_applied;
+						// store the position of `two` in swap_pos
+						swap_pos = j+1;
+						}
+					}
+				++one;
+				++two;
+				}	
+			// upper_limit is set to the position of `two` in the last swap
+			upper_limit = swap_pos;
+			// done if swap_pos is either 0 (no swap) or 1 (swapped first two elements)
+			}
+		}
+	else if (algochoice == 2) {
+		// insertion sort
+		Ex::sibling_iterator step = tr.begin(st);
+
+		// step tracks the beginning of the unsorted list
+		// first element is added to the sorted list, now of length 1
+		++step;
+		// continue growing the sorted list by bubbling the next element down to where it goes
+		// i is tracking the "index" of 'step'
+		for (unsigned int i = 1; i < num; i++) {
+			two = step;
+			++step;
+			// the sorted/unsorted interface is now
+			//  (sorted)   two    step
+			//    [0,i-1]   i      i+1
+			// 'two' will now be sorted into it
+			
+			// j tracks 'two' as we "bubble" it down into the ordered list until it finds its place
+			for (unsigned int j=i; j>=1; j--) {
+				one = two;
+				--one;
+
+				compare.clear();
+				auto es = compare.equal_subtree(one, two);
+				if(compare.should_swap(one, es)) {
+	#ifdef DEBUG
+					std::cerr << "should swap " << *(one->name) << " with " << *(two->name) << std::endl;
+	#endif
+					int canswap=compare.can_swap(one, two, es);
+	#ifdef DEBUG
+					std::cerr << "can swap? " << *(one->name) << " with " << *(two->name) << std::endl;
+	#endif
+					if(canswap!=0) {
+						// std::cerr << "swapping " << Ex(one) << " with " << Ex(two) << std::endl;
+						tr.swap(one);
+						std::swap(one,two);  // put the iterators back in order
+						if(canswap==-1) {
+							//						std::cout << "MINUS" << std::endl;
+							flip_sign(st->multiplier);
+							}
+						ret=result_t::l_applied;
+						}
+					else {
+						// 'two' is in place so [0,i] is now sorted
+						j=1;
+						}
+					}
+				--two;
+				}	
 			}
 		}
 
