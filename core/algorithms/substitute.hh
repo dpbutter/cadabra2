@@ -46,6 +46,7 @@ namespace cadabra {
 			// For object swap testing routines:
 			sort_product    sort_product_;
 			bool            partial;
+			bool			skipchecks;
 		};
 
 	}
