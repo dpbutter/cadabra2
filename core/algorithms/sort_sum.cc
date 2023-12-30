@@ -40,14 +40,13 @@ Algorithm::result_t sort_sum::apply(iterator& st)
 		}
 	*/
 	result_t ret=result_t::l_no_action;
-
-	std::vector<sibling_iterator> sibs;
-	sibling_iterator sib;
 	unsigned int num=tr.number_of_children(st);
+	std::vector<sibling_iterator> sibs(num);
+	sibling_iterator sib;
 	sib = tr.begin(st);
 	// Add all the sibling iterators
 	for (unsigned int i=0; i < num; i++) {
-		sibs.push_back(sib);
+		sibs[i] = sib;
 		++sib;
 		}
 	// sort them
