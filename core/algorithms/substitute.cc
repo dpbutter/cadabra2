@@ -13,8 +13,8 @@
 
 using namespace cadabra;
 
-substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
-	: Algorithm(k, tr), comparator(k.properties), args(args_), sort_product_(k, tr), partial(partial)
+substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial, bool skipchecks)
+	: Algorithm(k, tr), comparator(k.properties), args(args_), sort_product_(k, tr), partial(partial), skipchecks(skipchecks)
 	{
 	if(args.is_empty()) 
 		throw ArgumentException("substitute: Replacement rule is an empty expression.");
@@ -23,63 +23,75 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 	// sw.start();
 	cadabra::do_list(args, args.begin(), [&](Ex::iterator arrow) {
 		//args.print_recursive_treeform(std::cerr, arrow);
-		if(*arrow->name!="\\arrow" && *arrow->name!="\\equals")
-			throw ArgumentException("substitute: Argument is neither a replacement rule nor an equality.");
+		if (!skipchecks) {
+			if(*arrow->name!="\\arrow" && *arrow->name!="\\equals")
+				throw ArgumentException("substitute: Argument is neither a replacement rule nor an equality.");
 
-		sibling_iterator lhs=args.begin(arrow);
-		sibling_iterator rhs=lhs;
-		rhs.skip_children();
-		++rhs;
+			sibling_iterator lhs=args.begin(arrow);
+			sibling_iterator rhs=lhs;
+			rhs.skip_children();
+			++rhs;
 
-		if(*lhs->name=="") { // replacing a sub or superscript
-			lhs=tr.flatten_and_erase(lhs);
-			}
-		if(*rhs->name=="") { // replacing with a sub or superscript
-			rhs=tr.flatten_and_erase(rhs);
-			}
-
-		try {
-			if(*lhs->multiplier!=1) {
-				throw ArgumentException("substitute: No numerical pre-factors allowed on lhs of replacement rule.");
+			if(*lhs->name=="") { // replacing a sub or superscript
+				lhs=tr.flatten_and_erase(lhs);
 				}
-			// test validity of lhs and rhs
-			iterator lhsit=lhs, stopit=lhs;
-			stopit.skip_children();
-			++stopit;
-			while(lhsit!=stopit) {
-				if(lhsit->is_object_wildcard()) {
-					if(tr.number_of_children(lhsit)>0) {
-						throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
-						}
+			if(*rhs->name=="") { // replacing with a sub or superscript
+				rhs=tr.flatten_and_erase(rhs);
+				}
+
+			try {
+				if(*lhs->multiplier!=1) {
+					throw ArgumentException("substitute: No numerical pre-factors allowed on lhs of replacement rule.");
 					}
-				++lhsit;
-				}
-			lhsit=rhs;
-			stopit=rhs;
-			stopit.skip_children();
-			++stopit;
-			while(lhsit!=stopit) {
-				if(lhsit->is_object_wildcard()) {
-					if(tr.number_of_children(lhsit)>0) {
-						throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
+				// test validity of lhs and rhs
+				iterator lhsit=lhs, stopit=lhs;
+				stopit.skip_children();
+				++stopit;
+				while(lhsit!=stopit) {
+					if(lhsit->is_object_wildcard()) {
+						if(tr.number_of_children(lhsit)>0) {
+							throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
+							}
 						}
+					++lhsit;
 					}
-				++lhsit;
+				lhsit=rhs;
+				stopit=rhs;
+				stopit.skip_children();
+				++stopit;
+				while(lhsit!=stopit) {
+					if(lhsit->is_object_wildcard()) {
+						if(tr.number_of_children(lhsit)>0) {
+							throw ArgumentException("substitute: Object wildcards cannot have child nodes.");
+							}
+						}
+					++lhsit;
+					}
+				// check whether there are dummies.
+				index_map_t ind_free, ind_dummy;
+				classify_indices(lhs, ind_free, ind_dummy);
+				lhs_contains_dummies[arrow]= ind_dummy.size()>0;
+				ind_free.clear();
+				ind_dummy.clear();
+				if(rhs!=tr.end()) {
+					classify_indices(rhs, ind_free, ind_dummy);
+					rhs_contains_dummies[arrow]=ind_dummy.size()>0;
+					}
 				}
-
-			// check whether there are dummies.
-			index_map_t ind_free, ind_dummy;
-			classify_indices(lhs, ind_free, ind_dummy);
-			lhs_contains_dummies[arrow]= ind_dummy.size()>0;
-			ind_free.clear();
-			ind_dummy.clear();
+			catch(std::exception& er) {
+				throw ArgumentException(std::string("substitute: Index error in replacement rule. ")+er.what());
+				}
+			}
+		else {
+			// if skipchecks = true, all we do is populatate the *_contains_dummies bools			
+			sibling_iterator lhs=args.begin(arrow);
+			sibling_iterator rhs=lhs;
+			rhs.skip_children();
+			++rhs;
+			lhs_contains_dummies[arrow]=true;
 			if(rhs!=tr.end()) {
-				classify_indices(rhs, ind_free, ind_dummy);
-				rhs_contains_dummies[arrow]=ind_dummy.size()>0;
+				rhs_contains_dummies[arrow]=true;
 				}
-			}
-		catch(std::exception& er) {
-			throw ArgumentException(std::string("substitute: Index error in replacement rule. ")+er.what());
 			}
 		return true;
 		});

@@ -98,7 +98,7 @@ namespace cadabra {
 	// FIXME: now deprecated because we have operator[]?
 	pybind11::list terms(Ex_ptr ex);
 
-	Ex_ptr Ex_from_string(const std::string& in, bool make_ref = true, Kernel * kernel = nullptr);
+	Ex_ptr Ex_from_string(const std::string& in, bool make_ref = true, Kernel * kernel = nullptr, bool skipchecks = false);
 	Ex_ptr Ex_from_int(int num, bool make_ref = true);
 
 	Ex_ptr map_sympy_wrapper(Ex_ptr ex, std::string head, pybind11::args args);

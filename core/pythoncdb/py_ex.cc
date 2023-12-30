@@ -560,7 +560,7 @@ namespace cadabra {
 		return sb;
 		}
 
-	Ex_ptr Ex_from_string(const std::string& ex_, bool, Kernel *kernel)
+	Ex_ptr Ex_from_string(const std::string& ex_, bool, Kernel *kernel, bool skipchecks)
 		{
 		if (kernel == nullptr)
 			kernel = get_kernel_from_scope();
@@ -590,7 +590,9 @@ namespace cadabra {
 		// cleanup of nested sums and products.
 		pre_clean_dispatch_deep(*kernel, *ptr);
 		cleanup_dispatch_deep(*kernel, *ptr);
-		check_index_consistency(*kernel, *ptr, (*ptr).begin());
+		if (!skipchecks) {
+			check_index_consistency(*kernel, *ptr, (*ptr).begin());
+			}
 		call_post_process(*kernel, ptr);
 		//	std::cerr << "cleaned up" << std::endl;
 
@@ -671,7 +673,7 @@ namespace cadabra {
 			.value("no_match_greater", Ex_comparator::match_t::no_match_greater);
 
 		pybind11::class_<Ex, Ex_ptr >(m, "Ex")
-		.def(py::init(&Ex_from_string), py::arg("input_form"), py::arg("make_ref") = true, py::arg("kernel") = nullptr)
+		.def(py::init(&Ex_from_string), py::arg("input_form"), py::arg("make_ref") = true, py::arg("kernel") = nullptr, py::arg("skip_checks") = false)
 		.def(py::init(&Ex_from_int), py::arg("num"), py::arg("make_ref") = true)
 		.def("__str__", &Ex_as_str)
 		.def("_latex_", &Ex_as_latex)
