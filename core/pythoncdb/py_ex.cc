@@ -541,9 +541,7 @@ namespace cadabra {
 
 		// First pull in any expressions referred to with @(...) notation, because the
 		// full expression may not have consistent indices otherwise.
-		if (!skipchecks) {
-			pull_in(ptr, kernel);
-		}
+		pull_in(ptr, kernel);
 		//	std::cerr << "pulled in" << std::endl;
 
 		// Basic cleanup of rationals and subtractions, followed by
@@ -557,9 +555,7 @@ namespace cadabra {
 		//	std::cerr << "cleaned up" << std::endl;
 
 		// Now run all embedded python functions.
-		if (!skipchecks) {
-			run_python_functions(ptr, kernel);
-		}
+		run_python_functions(ptr, kernel);
 
 		return ptr;
 		}
