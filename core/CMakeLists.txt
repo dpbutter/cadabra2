@@ -1,6 +1,8 @@
-cmake_minimum_required(VERSION ${CADABRA_CMAKE_VERSION}) # Required for various macros
+# cmake_minimum_required(VERSION ${CADABRA_CMAKE_VERSION}) # Required for various macros
 project(Cadabra)
-
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+endif()
 
 #---------------------------------------------------------------------------
 # Preamble.
@@ -32,7 +34,7 @@ configure_file(
 #   # so no linking takes place
 #   set(Boost_USE_STATIC_LIBS   ON)
 # endif()
-find_package(Boost 1.53 COMPONENTS system)
+find_package(Boost 1.53 COMPONENTS system filesystem)
 
 # Find glibmm (for base64)
 # Conda will probably go belly-up again...
@@ -133,6 +135,7 @@ set(PROPERTY_SRC_FILES
    properties/Depends.cc
    properties/DependsInherit.cc
    properties/Derivative.cc
+   properties/DerivativeOp.cc   
    properties/Determinant.cc
    properties/Diagonal.cc
    properties/DifferentialForm.cc
@@ -287,19 +290,22 @@ pybind11_add_module(cadabra2 SHARED
    ${MODULE_SRC_FILES}
 )
 set_target_properties(cadabra2 PROPERTIES 
-   SUFFIX ".${PYTHON_MOD_SUFFIX}" 
+   SUFFIX ".${Python_MOD_SUFFIX}" 
    CXX_VISIBILITY_PRESET default)
 
 target_link_libraries(cadabra2 PRIVATE
    ${GMPXX_LIBRARIES}
    ${GMP_LIBRARIES}   
    ${Boost_LIBRARIES}
-#  ${PYTHON_LIBRARIES}
+#  ${Python_LIBRARIES}
 #  ${GLIBMM3_LIBRARIES}    
    )
 
 if(IPO_SUPPORTED)
+  message(STATUS "IPO / LTO for cadabra2 enabled")     
   set_property(TARGET cadabra2 PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set_target_properties(cadabra2 PROPERTIES COMPILE_FLAGS "-flto=auto")
+  set_target_properties(cadabra2 PROPERTIES LINK_FLAGS "-flto=auto")  
 endif()
 
    
@@ -309,13 +315,17 @@ endif()
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   set_target_properties(cadabra2 PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-  target_link_libraries(cadabra2 PRIVATE ${PYTHON_LIBRARIES})
+  target_link_libraries(cadabra2 PRIVATE ${Python_LIBRARIES})
 elseif(CMAKE_SHARED_LINKER_FLAGS MATCHES ".*-Wl,--no-undefined.*")
   # Exception for systems that require no undefined symbols present
   # in shared libraries (e.g. openSUSE).
   message("-- Linking cadabra2.so to libpython.so because of default linker flags.")
-  target_link_libraries(cadabra2 PRIVATE ${PYTHON_LIBRARIES})
+  target_link_libraries(cadabra2 PRIVATE ${Python_LIBRARIES})
 endif()
+
+# Make the python module pick up elements from two parents up.
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set_target_properties(cadabra2 PROPERTIES INSTALL_RPATH "$ORIGIN/../../:$ORIGIN")
 
 if(MATHEMATICA_FOUND)
    target_link_libraries(cadabra2 PRIVATE ${Mathematica_WSTP_LIBRARIES})
@@ -326,18 +336,19 @@ add_executable(cadabra2-cli
    cadabra2-cli.cc
    CdbPython.cc
    InstallPrefix.cc
+   pythoncdb/py_helpers.cc
    ${CADABRA_LIBS_DIR}/whereami/whereami.c
 )
 target_compile_definitions(cadabra2-cli PRIVATE CDBPYTHON_NO_NOTEBOOK)
 target_include_directories(cadabra2-cli PRIVATE pybind11::pybind11)
-target_link_libraries(cadabra2-cli PRIVATE pybind11::embed ${GLIBMM3_LIBRARIES})
+target_link_libraries(cadabra2-cli PRIVATE pybind11::embed ${GLIBMM3_LIBRARIES} ${Boost_LIBRARIES})
 
 # Notebook diff tool
 add_executable(cdb-nbtool
   cdb-nbtool.cc
   ${CADABRA_LIBS_DIR}/tiny-process-library/process.cpp
 )
-if (MSVC)
+if(WIN32)
   target_sources(cdb-nbtool PRIVATE ${CADABRA_LIBS_DIR}/tiny-process-library/process_win.cpp)
 else()
   target_sources(cdb-nbtool PRIVATE ${CADABRA_LIBS_DIR}/tiny-process-library/process_unix.cpp)
@@ -365,7 +376,7 @@ add_executable(cadabra2python
 target_link_libraries(cadabra2python 
    ${Boost_LIBRARIES}
    #    ${GLIBMM3_LIBRARIES}     
-   ${PYTHON_LIBRARIES}
+   ${Python_LIBRARIES}
    )
 
 # cadabra2ipynb executable
@@ -381,7 +392,7 @@ add_executable(cadabra2ipynb
 target_link_libraries(cadabra2ipynb
    ${Boost_LIBRARIES}
    #    ${GLIBMM3_LIBRARIES}     
-   ${PYTHON_LIBRARIES}
+   ${Python_LIBRARIES}
    )
 
 # cadabra2cadabra
@@ -423,23 +434,14 @@ add_subdirectory(packages)
 # 
 # https://stackoverflow.com/questions/21198030/installfiles-cmake-cfg-intdir-abc-win-dll-destination-bin
 
-if(NOT WIN32)
-   # Remove any old cadabra2.so files in the global site-wide path which may have been
-   # left there from a previous install.
-   remove_file("${OLD_PYTHON_SITE_PATH}/cadabra2.${PYTHON_MOD_EXT}")
-   remove_file("${OLD_PYTHON_SITE_PATH}/cadabra2_defaults.py")
-   remove_file("${OLDER_PYTHON_SITE_PATH}/cadabra2.${PYTHON_MOD_EXT}")
-   remove_file("${OLDER_PYTHON_SITE_PATH}/cadabra2_defaults.py")
-endif()
-
 install_directory_permissions(${PYTHON_SITE_PATH})
 
-if (MSVC)
+if(WIN32)
   install(
     TARGETS
     cadabra2
     DESTINATION 
-    bin
+    .
     )
 else()
   install(
@@ -450,8 +452,16 @@ else()
     )
 endif()
 
-install(TARGETS cadabra2-cli DESTINATION bin)
-install(TARGETS cdb-nbtool DESTINATION bin)
+if(WIN32)
+  # Install the Python runtime packages.
+  install(CODE [[
+      execute_process(COMMAND cygpath -m "/ucrt64/lib/python3.11" OUTPUT_VARIABLE WINPYTHON OUTPUT_STRIP_TRAILING_WHITESPACE)
+      file(INSTALL ${WINPYTHON} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)    
+  ]])
+endif()
+
+install(TARGETS cadabra2-cli DESTINATION ${CDB_BIN_PATH})
+install(TARGETS cdb-nbtool DESTINATION ${CDB_BIN_PATH})
 
 install(
    FILES 
@@ -466,7 +476,7 @@ install(
   PROGRAMS 
     "${PROJECT_SOURCE_DIR}/cadabra2" 
   DESTINATION 
-    bin
+    ${CDB_BIN_PATH}
 )
 install_directory_permissions("bin")
 
@@ -475,7 +485,7 @@ install(
   TARGETS 
     cadabra2python 
   DESTINATION 
-    bin
+    ${CDB_BIN_PATH}
 )
 
 # cadabra2ipynb
@@ -483,7 +493,7 @@ install(
   TARGETS 
     cadabra2ipynb
   DESTINATION 
-    bin
+    ${CDB_BIN_PATH}
 )
 
 # cadabra2cadabra
@@ -491,36 +501,19 @@ install(
    TARGETS 
    cadabra2cadabra
    DESTINATION 
-   bin
-   )
+   ${CDB_BIN_PATH}
+ )
 
-if (MSVC AND NOT INSTALL_TARGETS_ONLY)
-   install_dlls_from("core")
-endif()
-
-if(NOT MSVC)
+if(NOT WIN32)
    if(CMAKE_GENERATOR MATCHES "Ninja")
       set(destdir_expr "\$\${DESTDIR}")
    else()
       set(destdir_expr "\$(DESTDIR)")
    endif()
-   
-#    add_custom_target(deduplicate
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2.1"
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2cadabra.1"
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2html.1"
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2latex.1"      
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2python.1"
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2ipynb.1"      
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2-gtk.1"
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra-server.1"
-#       COMMAND rm -f "\$(destdir_expr)${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2-cli.1"
-#       COMMENT "Removing manual pages from old location."
-#       )
 endif()             
 
 # manual pages
-if(NOT MSVC)
+if(NOT WIN32)
   install(
     FILES
     ../man/man1/cadabra2.1
@@ -533,4 +526,11 @@ if(NOT MSVC)
     DESTINATION
     share/man/man1
     )
+endif()
+
+if(APPIMAGE_MODE)
+  # Install sympy. Matplotlib would be nice, but that pulls in blas and fortran and zillions of other things,
+  # which then don't link properly anymore either.
+  install(CODE      "execute_process(COMMAND echo \"Installing python things in \$ENV{DESTDIR}|${CMAKE_INSTALL_PREFIX}|${PYTHON_SITE_PATH}\")")
+  install(CODE      "execute_process(COMMAND pip3 install --target \$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${PYTHON_SITE_PATH} sympy matplotlib)")
 endif()

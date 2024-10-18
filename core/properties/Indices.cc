@@ -8,6 +8,8 @@
 
 using namespace cadabra;
 
+#define MAX_INTEGER_RANGE 100
+
 Indices::Indices()
 	: position_type(free)
 	{
@@ -65,24 +67,49 @@ bool Indices::parse(Kernel& kernel, std::shared_ptr<Ex> ex, keyval_t& keyvals)
 			}
 		else if(ki->first=="values") {
 			//std::cerr << "got values keyword " << *(ki->second->name) << std::endl;
-			collect_index_values(ki->second);
+			if(*ki->second->name=="\\sequence") {
+				// Only accept a sequence if both start and end are explicit integers.
+				Ex::sibling_iterator sqit1 = Ex::begin(ki->second);
+				Ex::sibling_iterator sqit2 = sqit1;
+				++sqit2;
+				if(!sqit1->is_integer() || !sqit2->is_integer()) 
+					throw ConsistencyException("Value sequence for Indices property not explicit integers.");
 
-			// If all values are indices, add an `Integer' property for the object,
+				auto args = std::make_shared<cadabra::Ex>(ki->second);
+				auto prop = new Integer();
+				kernel.inject_property(prop, ex, args);
+
+				if(prop->difference.to_integer() > MAX_INTEGER_RANGE)
+					throw ConsistencyException("Value sequence for Indices property spans too many elements.");
+
+				for (int i=prop->from.to_integer(); i<=prop->to.to_integer(); ++i) {
+					values.push_back(Ex(i));
+					}
+				
+				++ki;
+				continue;
+				}
+
+			collect_index_values(ki->second);
+			// If all values are integers, add an `Integer' property for the object,
 			// listing these integers.
 			bool is_number=true;
+			bool is_continuous=false;
 			for(auto& val: values)
 				if(!val.begin()->is_integer()) {
 					is_number=false;
 					break;
 					}
-			// FIXME: the above assumes no gap in the integer range, which is
-			// not always guaranteed, and will then break the Integer property
-			// assignment as the latter can only deal with continuous ranges.
 			if(is_number) {
-				Ex from(values[0]), to(values[values.size()-1]);
+				std::sort(values.begin(), values.end(), [](Ex a, Ex b) {
+					return a.to_integer() < b.to_integer();
+					});
+				is_continuous = (int)values.size() == (values[values.size() - 1].to_integer() - values[0].to_integer() + 1);
+				}
+			// Do not apply Integer to a list of integers with gaps as
+			// the former can only deal with continuous ranges.
+			if(is_continuous) {
 //				std::cerr << "Injecting Integer property" << std::endl;
-				// FIXME: this assumes that the values are in a continuous range (as Integer cannot
-				// represent anything else at this stage).
 				kernel.inject_property(new Integer(), ex,
 											  kernel.ex_from_string(std::to_string(values[0].to_integer())+".."
 																			+std::to_string(values[values.size()-1].to_integer())
@@ -125,24 +152,6 @@ void Indices::validate(const Kernel& k, const Ex& ex) const
 
 void Indices::collect_index_values(Ex::iterator ind_values)
 	{
-	if(*ind_values->name=="\\sequence") {
-		// We have been given a sequence, not a list.
-		// FIXME: guard against errors or large ranges.
-		auto ch = Ex::begin(ind_values);
-		size_t start = to_long(*ch->multiplier);
-		++ch;
-		size_t end   = to_long(*ch->multiplier);
-		if(end<start)
-			throw ArgumentException("Index range must be increasing.");
-		if(end-start > 100)
-			throw ArgumentException("Number of index values larger than 100, probably a typo.");
-			
-		for(size_t i=start; i<=end; ++i) {
-			values.push_back(Ex(i));
-			}
-		return;
-		}
-	
 	Ex tmp;
 	cadabra::do_list(tmp, ind_values, [&](Ex::iterator ind) {
 		values.push_back(Ex(ind));

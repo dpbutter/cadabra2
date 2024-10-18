@@ -75,6 +75,17 @@ namespace cadabra {
 		//	std::cout << "Ex copy constructor" << std::endl;
 		}
 
+	Ex& Ex::operator=(Ex other)
+		{
+		std::swap(static_cast<tree<str_node>&>(*this),
+					 static_cast<tree<str_node>&>(other));
+		std::swap((*this).state_, other.state_);
+		std::swap((*this).history, other.history);
+		std::swap((*this).terms, other.terms);
+
+		return *this;
+		}
+
 	Ex::Ex(const std::string& str)
 		: state_(result_t::l_no_action)
 		{
@@ -86,6 +97,14 @@ namespace cadabra {
 		{
 		set_head(str_node("1"));
 		multiply(begin()->multiplier, val);
+		}
+
+	Ex::Ex(float val)
+		: state_(result_t::l_no_action)
+		{
+		std::ostringstream str;
+		str << val;
+		set_head(str_node(str.str()));
 		}
 
 	Ex::result_t Ex::state() const
@@ -334,7 +353,7 @@ namespace cadabra {
 		//	str << "  (" << calc_hash(it) << ")";
 		//	str << "  (" << depth(it) << ")";
 		//	str << "  (" << it->fl.bracket << " " << &(*it) << ")";
-		str << "  (" << it->fl.bracket << " " << it.node << ")";
+//		str << "  (" << it->fl.bracket << " " << it.node << ")";
 		if(!compact_tree) str << std::endl;
 
 		while(beg!=fin) {
@@ -1054,7 +1073,8 @@ found:
 	bool str_node::operator<(const cadabra::str_node& other) const
 		{
 		if(*name<*other.name) return true;
-		else return false;
+		if(*name==*other.name && *multiplier<*other.multiplier) return true;
+		return false;
 		}
 
 	}

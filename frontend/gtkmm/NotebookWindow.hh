@@ -2,17 +2,19 @@
 #pragma once
 
 #include <gtkmm/window.h>
+#include <gtkmm/applicationwindow.h>
 #include <gtkmm/box.h>
 #include <gtkmm/progressbar.h>
 #include <gtkmm/spinner.h>
 #include <gtkmm/label.h>
 #include <gtkmm/stock.h>
 #include <gtkmm/button.h>
-#include <gtkmm/uimanager.h>
+#include <gtkmm/builder.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/toolbar.h>
 #include <glibmm/dispatcher.h>
 #include <giomm/settings.h>
-#include <gtkmm/action.h>
+#include <giomm/actiongroup.h>
 
 #include <thread>
 #include <mutex>
@@ -36,7 +38,7 @@ namespace cadabra {
 	/// Each notebook has one main window which controls it. It has a menu bar, a
 	/// status pane and one or more panels that represent a view on the document.
 
-	class NotebookWindow : public Gtk::Window, public DocumentThread, public GUIBase {
+	class NotebookWindow : public Gtk::ApplicationWindow, public DocumentThread, public GUIBase {
 		public:
 			NotebookWindow(Cadabra *, bool read_only=false);
 			~NotebookWindow();
@@ -125,9 +127,9 @@ namespace cadabra {
 			void on_outbox_copy(Glib::RefPtr<Gtk::Clipboard> refClipboard, DTree::iterator it);
 
 		private:
-			Cadabra *cdbapp;
+			Glib::RefPtr<Cadabra> cdbapp;
 
-			std::vector<Glib::RefPtr<Gtk::Action>> default_actions;
+			std::vector<Glib::RefPtr<Gio::SimpleAction>> default_actions;
 
 			// Main handler which fires whenever the Client object signals
 			// that the document is changing or the network status is modified.
@@ -137,10 +139,13 @@ namespace cadabra {
 
 			// GUI elements.
 
-			Glib::RefPtr<Gtk::ActionGroup> actiongroup;
-			Glib::RefPtr<Gtk::UIManager>   uimanager;
+			Glib::RefPtr<Gio::SimpleActionGroup> actiongroup;
+			Glib::RefPtr<Gtk::Builder>           uimanager;
 
 			Gtk::VBox                      topbox;
+			Gtk::HBox                      toolbar;
+			Gtk::Button                    tool_open, tool_save, tool_save_as;
+			Gtk::Button                    tool_run, tool_run_to, tool_stop, tool_restart;		
 			Gtk::HBox                      supermainbox;
 			Gtk::Paned                     dragbox;
 			Gtk::VBox                      mainbox;
@@ -169,7 +174,7 @@ namespace cadabra {
 			Gtk::ProgressBar               progressbar;
 			Gtk::Spinner                   kernel_spinner;
 			bool                           kernel_spinner_status;
-			Gtk::Label                     status_label, kernel_label;
+			Gtk::Label                     status_label, kernel_label, top_label;
 
 			// GUI data which is the autoritative source for things displayed in
 			// the status bars declared above. These strings are filled on the
@@ -205,10 +210,10 @@ namespace cadabra {
 			void on_file_export_python();
 			void on_file_quit();
 			bool quit_safeguard(bool quit);
+			bool on_first_redraw();
 
 			void on_edit_undo();
-			void on_edit_copy();
-			Glib::RefPtr<Gtk::Action> action_copy, action_paste;
+			void on_edit_copy(const Glib::VariantBase&);
 			void on_edit_paste();
 			void on_edit_insert_above();
 			void on_edit_insert_below();
@@ -227,9 +232,10 @@ namespace cadabra {
 			void on_run_runtocursor();
 			void on_run_stop();
 
-			void on_prefs_set_cv(Console::Position vis);
+			void on_prefs_set_cv(int vis);
 			void on_prefs_font_size(int num);
 			void on_prefs_highlight_syntax(bool on);
+			void on_prefs_microtex(bool on);
 			void on_prefs_choose_colours();
 			void on_prefs_use_defaults();
 
@@ -312,7 +318,10 @@ namespace cadabra {
 
 			bool  is_configured;
 
-			Glib::RefPtr<Gtk::Action> menu_help_register;
+			// We keep references to a few menu actions so we can
+			// enable/disable them at runtime.
+			Glib::RefPtr<Gio::SimpleAction> action_copy, action_paste, action_fontsize, action_highlight,
+				action_stop, action_register, action_console, action_microtex;
 
 			// Transition animations.
 #if GTKMM_MINOR_VERSION>=10

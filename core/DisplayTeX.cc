@@ -101,13 +101,13 @@ bool DisplayTeX::reads_as_operator(Ex::iterator obj, Ex::iterator arg) const
 		// FIXME: this needs fine-tuning; there are more cases where
 		// no brackets are needed.
 		const LaTeXForm *lf = kernel.properties.get<LaTeXForm>(arg);
-		if((*arg->name).size()==1 || lf || cadabra::symbols::greek.find(*arg->name)!=cadabra::symbols::greek.end()) return true;
+		if((*arg->name).size()==1 || lf || cadabra::symbols::greekmap.find(*arg->name)!=cadabra::symbols::greekmap.end()) return true;
 		}
 
 	if(*obj->name=="\\cos" || *obj->name=="\\sin" || *obj->name=="\\tan" || *obj->name=="\\exp") {
 		const LaTeXForm *lf = kernel.properties.get<LaTeXForm>(arg);
 		if(*arg->multiplier==1)
-			if((*arg->name).size()==1 || lf || cadabra::symbols::greek.find(*arg->name)!=cadabra::symbols::greek.end()) return true;
+			if((*arg->name).size()==1 || lf || cadabra::symbols::greekmap.find(*arg->name)!=cadabra::symbols::greekmap.end()) return true;
 		}
 
 	auto it=curly_bracket_operators.find(*obj->name);
@@ -461,6 +461,9 @@ void DisplayTeX::print_parent_rel(std::ostream& str, str_node::parent_rel_t pr, 
 
 void DisplayTeX::dispatch(std::ostream& str, Ex::iterator it)
 	{
+	if(handle_unprintable_wildcards(str, it))
+		return;
+	
 	if(*it->name=="\\prod")                                   print_productlike(str, it, " ");
 	else if(*it->name=="\\sum" || *it->name=="\\oplus")       print_sumlike(str, it);
 	else if(*it->name=="\\frac")                              print_fraclike(str, it);
@@ -492,7 +495,7 @@ void DisplayTeX::print_commalike(std::ostream& str, Ex::iterator it)
 		if(first)
 			first=false;
 		else
-			str << ",~" << discr << " ";
+			str << ", " << discr; // << " ";
 		dispatch(str, sib);
 		++sib;
 		}
@@ -549,6 +552,7 @@ void DisplayTeX::print_fraclike(std::ostream& str, Ex::iterator it)
 		str << " - ";
 		mult=-1;
 		}
+
 	str << "\\frac{";
 	if(mult * (*it->multiplier)!=1) {
 		print_multiplier(str, it, mult);
@@ -707,8 +711,10 @@ void DisplayTeX::print_sumlike(std::ostream& str, Ex::iterator it)
 	while(ch!=tree.end(it)) {
 		//		if(ch!=tree.begin(it))
 		//			str << "%\n"; // prevent LaTeX overflow.
+		if(steps>0)
+			str << discr;
 		if(++steps==20) {
-			steps=0;
+			steps=1;
 			str << "%\n"; // prevent LaTeX overflow.
 			}
 		if(*ch->multiplier>=0 && ch!=tree.begin(it)) {
@@ -738,12 +744,28 @@ void DisplayTeX::print_sumlike(std::ostream& str, Ex::iterator it)
 	str << std::flush;
 	}
 
+bool DisplayTeX::handle_unprintable_wildcards(std::ostream& str, Ex::iterator it) const
+	{
+	// Catch `\pow{#}` and other wildcard constructions, these
+	// need to print verbatim.
+
+	if(it.number_of_children()==1) {
+		const std::string& name = (*it->name);
+		if(name.size()>0 && name[0]=='\\' && *(it.begin()->name)=="#") {
+			str << "\\backslash\\texttt{" << name.substr(1) << "}\\{\\#\\}";
+			return true;
+			}
+		}
+	return false;
+	}
+
 void DisplayTeX::print_powlike(std::ostream& str, Ex::iterator it)
 	{
 	auto arg=tree.begin(it);
 	assert(arg!=tree.end(it));
 	auto exp=arg;
 	++exp;
+
 	assert(exp!=tree.end(it));
 
 	if (kernel.display_fractions && exp->is_rational() && *exp->multiplier < 0) {

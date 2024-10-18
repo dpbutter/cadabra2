@@ -9,7 +9,6 @@ project(Cadabra)
 print_header("Configuring packages")
 
 set(PYTHON_CDB_PACKAGE_PATH    ${PYTHON_SITE_PATH}/cdb)
-set(OLDPYTHON_CDB_PACKAGE_PATH ${OLD_PYTHON_SITE_PATH}/cdb)
 set(SOURCE_PACKAGEDIR          ${CMAKE_SOURCE_DIR}/core/packages/cdb)
 set(PACKAGEDIR                 ${CMAKE_BINARY_DIR}/core/packages/cdb)
 
@@ -36,10 +35,15 @@ set(PACKAGES
   relativity/schwarzschild
   )
 
-set(COMPILED_PACKAGES
-  core/_component.cc
-  utils/_algorithm.cc
+if(WIN32)
+  set(COMPILED_PACKAGES
   )
+else()
+  set(COMPILED_PACKAGES
+    core/_component.cc
+    utils/_algorithm.cc
+  )
+endif()
 
 #---------------------------------------------------------------------------
 # Install packages
@@ -55,20 +59,30 @@ foreach(PACKAGE ${PACKAGES})
   )
 endforeach()
 
+find_package(GMPXX REQUIRED STATIC)
+
 foreach(PACKAGE ${COMPILED_PACKAGES})
   SET(CMAKE_SKIP_BUILD_RPATH FALSE)
   SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-  SET(CMAKE_INSTALL_RPATH "${PYTHON_SITE_PATH}")
   get_filename_component(PINSTALL ${PACKAGE} DIRECTORY)
   get_filename_component(PNAME ${PACKAGE} NAME_WE)
   pybind11_add_module(${PNAME} SHARED ${SOURCE_PACKAGEDIR}/${PACKAGE})
   message(STATUS "Storing algorithm C++ module as ${PINSTALL}")
   set_target_properties(${PNAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cdb/${PINSTALL}")
   set_target_properties(${PNAME} PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cdb/${PINSTALL}")
-  set_target_properties(${PNAME} PROPERTIES SUFFIX ".${PYTHON_MOD_SUFFIX}")
-
-  target_link_libraries(${PNAME} PUBLIC cadabra2 ${GMPXX_LIBRARIES})
+  set_target_properties(${PNAME} PROPERTIES SUFFIX ".${Python_MOD_SUFFIX}")
+  set_target_properties(${PNAME} PROPERTIES INSTALL_RPATH "$ORIGIN/../../:$ORIGIN/../../../../")
+  
+  target_link_libraries(${PNAME} PUBLIC cadabra2 ${GMPXX_LIBRARIES} ${GMP_LIBRARIES})
   target_include_directories(${PNAME} PUBLIC ${CADABRA_CORE_DIR})
+
+  if(IPO_SUPPORTED)
+    message(STATUS "IPO / LTO for ${PNAME} enabled")     
+    set_property(TARGET ${PNAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set_target_properties(${PNAME} PROPERTIES COMPILE_FLAGS "-flto=auto")
+    set_target_properties(${PNAME} PROPERTIES LINK_FLAGS "-flto=auto")  
+  endif()
+  
   install(TARGETS ${PNAME} DESTINATION ${PYTHON_CDB_PACKAGE_PATH}/${PINSTALL})
 endforeach()
 

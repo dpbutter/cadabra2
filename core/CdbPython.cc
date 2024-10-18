@@ -58,19 +58,35 @@ std::string cadabra::cdb2python_string(const std::string& blk, bool display)
 	std::stringstream str(blk);
 	std::string line;
 	std::string newblk;
-	std::string lhs, rhs, op, indent;
+	ConvertData cv;
+//	std::string lhs, rhs, op, indent;
 	while(std::getline(str, line, '\n')) {
-		std::string res=cadabra::convert_line(line, lhs, rhs, op, indent, display);
+		std::string res=cadabra::convert_line(line, cv, display); // lhs, rhs, op, indent, display);
 		// std::cerr << "preparsed : " + res << std::endl;
 		if(res!="::empty")
-			newblk += res+'\n';
+			newblk += res+"\n";
 		}
 	return newblk;
 	}
 
-std::string cadabra::convert_line(const std::string& line, std::string& lhs, std::string& rhs, std::string& op, std::string& indent, bool display)
+cadabra::ConvertData::ConvertData()
+	{
+	}
+
+cadabra::ConvertData::ConvertData(const std::string& lhs_, const std::string& rhs_,
+											 const std::string& op_, const std::string& indent_)
+	: lhs(lhs_), rhs(rhs_), op(op_), indent(indent_)
+	{
+	}
+
+std::string cadabra::convert_line(const std::string& line, ConvertData& cv, bool display) // std::string& lhs, std::string& rhs, std::string& op, std::string& indent, bool display)
 	{
 	std::string ret;
+
+	auto& lhs    = cv.lhs;
+	auto& rhs    = cv.rhs;
+	auto& op     = cv.op;
+	auto& indent = cv.indent;
 
 	std::regex imatch("([\\s]*)([^\\s].*[^\\s])([\\s]*)");
 	std::cmatch mres;
@@ -94,8 +110,9 @@ std::string cadabra::convert_line(const std::string& line, std::string& lhs, std
 	// Do not do anything with comment lines.
 	if(line_stripped[0]=='#') return line;
 
-	// Bare ';' gets replaced with 'display(_)'.
-	if(line_stripped==";") {
+	// Bare ';' gets replaced with 'display(_)' but *only* if we have no
+	// preceding lines which have not finished parsing.
+	if(line_stripped==";" && lhs=="") {
 		if(display)
 			return indent_line+"display(_)";
 		else
@@ -108,7 +125,7 @@ std::string cadabra::convert_line(const std::string& line, std::string& lhs, std
 	if(lastchar=="." || lastchar==";" || lastchar==":") {
 		if(lhs!="") {
 			line_stripped=line_stripped.substr(0,line_stripped.size()-1);
-			rhs += line_stripped;
+			rhs += " "+line_stripped;
 			ret = indent + lhs + " = Ex(r'" + escape_quotes(rhs) + "')";
 			if(op==":=") {
 				if(ret[ret.size()-1]!=';')
@@ -174,7 +191,7 @@ std::string cadabra::convert_line(const std::string& line, std::string& lhs, std
 	else {   // {a,b,c}::Indices(real, parent=holo);
 		found = line_stripped.find("::");
 		if(found!=std::string::npos) {
-			std::regex amatch(R"(([a-zA-Z]+)(\(.*\))?[;\.:]*)");
+			std::regex amatch(R"(([a-zA-Z]+)(\(.*\))?[ ]*[;\.:]*)");
 			std::smatch ares;
 			std::string subline=line_stripped.substr(found+2); // need to store the copy, not feed it straight into regex_match!
 			if(std::regex_match(subline, ares, amatch)) {
@@ -233,7 +250,6 @@ std::string cadabra::cnb2python(const std::string& in_name, bool for_standalone)
 	    << "# Do not modify - changing the timestamp of this file may cause import errors\n"
 	    << "# Original file location: " << in_name << '\n'
 	    << "import cadabra2\n"
-	    << "import imp\n"
 	    << "from cadabra2 import *\n"
 		 << "from cadabra2_defaults import *\n"
 	    << "__cdbkernel__ = cadabra2.__cdbkernel__\n"
@@ -241,9 +257,6 @@ std::string cadabra::cnb2python(const std::string& in_name, bool for_standalone)
 	    << "def display(ex):\n"
 	    << "   pass\n\n";
 
-	//	    << "with open(imp.find_module('cadabra2_defaults')[1]) as f:\n"
-	//	    << "   code = compile(f.read(), 'cadabra2_defaults.py', 'exec')\n"
-	//	    << "   exec(code)\n\n";
 
 	// FIXME: this only does a single layer of cells below the top-level
 	// 'document' cell; need recursing, in principle.
@@ -254,9 +267,10 @@ std::string cadabra::cnb2python(const std::string& in_name, bool for_standalone)
 			if(cell->cell_type==cadabra::DataCell::CellType::python) {
 				std::stringstream s, temp;
 				s << cell->textbuf; // cell["source"].asString();
-				std::string line, lhs, rhs, op, indent;
+				ConvertData cv;
+//				std::string line, lhs, rhs, op, indent;
 				while (std::getline(s, line)) {
-					auto res = convert_line(line, lhs, rhs, op, indent, for_standalone);
+					auto res = convert_line(line, cv, for_standalone); // lhs, rhs, op, indent, for_standalone);
 					if(res!="::empty")
 						ofs << res << '\n';
 					}

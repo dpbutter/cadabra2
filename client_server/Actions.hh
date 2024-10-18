@@ -66,6 +66,8 @@ namespace cadabra {
 			virtual void execute(DocumentThread&, GUIBase&) override;
 			virtual void revert(DocumentThread&,  GUIBase&) override;
 
+			/// Can this action be undone?
+			virtual bool undoable() const override;
 		private:
 			// Keep track of the location where this cell is inserted into
 			// the notebook.
@@ -74,6 +76,10 @@ namespace cadabra {
 			DTree::iterator   newref;
 			Position          pos;
 			int               child_num;
+
+			// If we are replacing a cell, keep track of that so we
+			// report that we are not undoable.
+			bool              is_replacement;
 		};
 
 
@@ -140,6 +146,22 @@ namespace cadabra {
 			size_t            reference_child_index;
 		};
 
+	/// \ingroup clientserver
+	///
+	/// Replace the contents of a cell. Not undo-able.
+
+	class ActionReplaceCell : public ActionBase {
+		public:
+			ActionReplaceCell(DataCell::id_t ref_id_);
+			virtual ~ActionReplaceCell();
+
+			virtual void execute(DocumentThread&, GUIBase&) override;
+			virtual void revert(DocumentThread&,  GUIBase&) override;
+
+			virtual bool undoable() const override;
+		private:
+		};
+	
 	/// \ingroup clientserver
 	///
 	/// Split a cell into two separate cells, at the point of the cursor.

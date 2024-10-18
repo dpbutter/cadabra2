@@ -174,9 +174,10 @@ void DocumentThread::process_action_queue()
 	// FIXME: we certainly do not want any two threads to run this at the same time,
 	// but that is not guaranteed. Actions should always be run on the GUI thread.
 	// This absolutely has to be run on the main GUI thread.
-	//	assert(main_thread_id==std::this_thread::get_id());
 
-
+	// if(main_thread_id != std::this_thread::get_id())
+	// 	throw std::logic_error("DocumentThread::process_action_queue: internal error, not running on main thread.");
+	
 	stack_mutex.lock();
 	while(pending_actions.size()>0) {
 		std::shared_ptr<ActionBase> ab = pending_actions.front();
@@ -256,6 +257,16 @@ DocumentThread::Prefs::Prefs(bool use_defaults)
 	python_path        = data.value("python_path", "");
 	move_into_new_cell = data.value("move_into_new_cell", false);
 	tab_completion     = data.value("tab_completion", true);
+	microtex           = data.value("microtex", true);
+
+	// Force microtex when this is an AppImage.
+	const char *appdir = getenv("APPDIR");
+	if(appdir)
+		microtex=true;
+	// Force microtex when we are on Windows.
+#if(_WIN32)
+	microtex = true;
+#endif
 
 	if(git_path=="")
 		git_path="/usr/bin/git";
@@ -297,6 +308,7 @@ void DocumentThread::Prefs::save()
 		data["python_path"] = python_path;
 		data["move_into_new_cell"] = move_into_new_cell;
 		data["tab_completion"] = tab_completion;
+		data["microtex"] = microtex;
 		for (const auto& lang : colours) {
 			for (const auto& kw : lang.second)
 				data["colours"][lang.first][kw.first] = kw.second;

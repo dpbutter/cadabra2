@@ -1,49 +1,29 @@
 # Prints section headers
 macro(print_header TEXT)
-	message("")
-	message("-------------------------------------------")
-	message("  ${TEXT}")
-	message("-------------------------------------------")
+  message("")
+  message("-------------------------------------------")
+  message("  ${TEXT}")
+  message("-------------------------------------------")
 endmacro()
 
 # Install directory permissions
 macro(install_directory_permissions DIR)
-	install(
-		DIRECTORY DESTINATION ${DIR}
-		DIRECTORY_PERMISSIONS 
-		OWNER_READ 
-		OWNER_WRITE 
-		OWNER_EXECUTE 
-		GROUP_READ 
-		GROUP_EXECUTE 
-		WORLD_READ 
-		WORLD_EXECUTE
-	)
+  install(
+    DIRECTORY DESTINATION ${DIR}
+    DIRECTORY_PERMISSIONS 
+    OWNER_READ 
+    OWNER_WRITE 
+    OWNER_EXECUTE 
+    GROUP_READ 
+    GROUP_EXECUTE 
+    WORLD_READ 
+    WORLD_EXECUTE
+  )
 endmacro()
 
-# Executes rm -f on FILENAME
-macro(remove_file FILENAME)
-	install(CODE "execute_process(COMMAND rm -f ${FILENAME})")
-endmacro()
-macro(remove_dir DIRNAME)
-	install(CODE "execute_process(COMMAND rmdir ${DIRNAME})")
-endmacro()
-
-# Inserts an install directive to copy all dlls from
-# the build directory of SUBPROJECT to the Install
-# bin folder
-macro(install_dlls_from SUBPROJECT)
-	if(CMAKE_GENERATOR MATCHES "Visual Studio.*")
-		install(
-			DIRECTORY "${CMAKE_BINARY_DIR}/${SUBPROJECT}/${CMAKE_BUILD_TYPE}/"
-			DESTINATION bin
-			FILES_MATCHING PATTERN "*.dll"
-		)
-	else()
-		install(
-			DIRECTORY "${CMAKE_BINARY_DIR}/${SUBPROJECT}/"
-			DESTINATION bin
-			FILES_MATCHING PATTERN "*.dll"
-		)
-	endif()
+# Macro just like `install`, but converting the path from a unix
+# path to a windows path using `cygpath`.
+macro(winstall TMP1 FILE TMP2 DEST)
+  execute_process(COMMAND cygpath -m ${FILE} OUTPUT_VARIABLE WFILE OUTPUT_STRIP_TRAILING_WHITESPACE)
+  install(FILES ${WFILE} DESTINATION ${DEST})
 endmacro()

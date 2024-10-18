@@ -13,10 +13,11 @@ namespace cadabra {
 
 	class ImageView : public Gtk::EventBox {
 		public:
-			ImageView();
+			ImageView(double scale);
 			virtual ~ImageView();
 
 			void set_image_from_base64(const std::string& b64);
+			void set_image_from_svg(const std::string& svg);
 
 			virtual bool on_motion_notify_event(GdkEventMotion *event) override;
 			virtual bool on_button_press_event(GdkEventButton *event) override;
@@ -30,6 +31,7 @@ namespace cadabra {
 			bool   sizing;
 			double prev_x, prev_y;
 			int    height_at_press, width_at_press;
+			double scale;
 		};
 
 	};

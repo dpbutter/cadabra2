@@ -22,13 +22,16 @@
 //#endif
 #include "CdbPython.hh"
 #include "SympyCdb.hh"
+#include "pythoncdb/py_helpers.hh"
 
-//#define DEBUG 1
+// #define DEBUG 1
 
 
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
+
+bool interrupt_block=false;
 
 Server::Server()
 //	: return_cell_id(std::numeric_limits<uint64_t>::max()/2)
@@ -144,9 +147,7 @@ void Server::init()
 
 	// Make the C++ CatchOutput class visible on the Python side.
 
-	auto python_path = std::string(PYTHON_SITE_PATH);
-	
-	// auto python_path = std::string(cadabra::install_prefix() + "/lib/python" + std::to_string(PY_MAJOR_VERSION) + "." + std::to_string(PY_MINOR_VERSION) + "/" + std::string(PYTHON_SITE_DIST));
+	auto python_path = cadabra::install_prefix_of_module();
 
 	std::string stdOutErr =
 	   "import sys\n"
@@ -176,21 +177,38 @@ void Server::init()
 		throw;
 		}
 
-
+	// Get the Python thread id.
+	std::string code_get_id = "import threading; print(threading.get_native_id())";
+	std::string main_thread_id_str = run_string(code_get_id);
+	main_thread_id = std::stol(main_thread_id_str);
+	// std::cerr << "Server: main python thread id = " << main_thread_id << std::endl;
+	// std::cerr << "Server: python_path = " << python_path << std::endl;
+	
 	// Call the Cadabra default initialisation script.
 
-	//	pybind11::eval_file(PYTHON_SITE_PATH"/cadabra2_defaults.py");
+	//	pybind11::eval_file(python_path + "/cadabra2_defaults.py");
 	//	HERE: should use pybind11::eval_file instead, much simpler.
 	//
 	std::string startup =
 	   "f=open(r'" + python_path + "/cadabra2_defaults.py'); "
 	   "code=compile(f.read(), 'cadabra2_defaults.py', 'exec'); "
-	   "exec(code); f.close()";
+	   "exec(code); f.close() ";
 	run_string(startup);
 
 #ifdef DEBUG
 	std::cerr << "Server::init: completed" << std::endl;
 #endif
+	}
+
+int InterruptCheck(PyObject* obj, _frame* frame, int what, PyObject* arg)
+	{
+	std::cerr << "Server: interruptcheck" << std::endl;
+	if(interrupt_block) {
+		PyErr_SetString(PyExc_KeyboardInterrupt, "Stop script");
+		interrupt_block = false;
+		}
+	
+	return 0;
 	}
 
 std::string Server::run_string(const std::string& blk, bool handle_output)
@@ -201,9 +219,11 @@ std::string Server::run_string(const std::string& blk, bool handle_output)
 	std::string result;
 
 	// Preparse input block.
+	// std::cerr << "RAW:\n" << blk << std::endl;
+	
 	auto newblk = cadabra::cdb2python_string(blk, true);
 
-	//	std::cerr << "PREPARSED:\n" << newblk << std::endl;
+	// std::cerr << "PREPARSED:\n" << newblk << std::endl;
 	// snoop::log("preparsed") << newblk << snoop::flush;
 
 	// Run block. Catch output.
@@ -214,7 +234,9 @@ std::string Server::run_string(const std::string& blk, bool handle_output)
 		std::cerr << newblk << std::endl;
 #endif
 		PyErr_Clear();
+//		PyEval_SetTrace(InterruptCheck, NULL);		
 		pybind11::exec(newblk.c_str(), main_namespace);
+//		PyEval_SetTrace(NULL, NULL);		
 #ifdef DEBUG
 		std::cerr << "exec done" << std::endl;
 #endif
@@ -224,6 +246,10 @@ std::string Server::run_string(const std::string& blk, bool handle_output)
 		if(handle_output) {
 			result = catchOut.str();
 			catchOut.clear();
+			std::string result_err = catchErr.str();
+			if(result_err!="") 
+				std::cerr << "catchErr: " << result_err << std::endl;
+			catchErr.clear();
 			}
 		}
 	catch(pybind11::error_already_set& ex) {
@@ -239,6 +265,11 @@ std::string Server::run_string(const std::string& blk, bool handle_output)
 		// error come back on any future pybind11::exec() call.
 		std::string reason=parse_error(ex.what(), newblk);
 		ex.restore();
+		if(reason.substr(0, 17)=="KeyboardInterrupt") {
+			auto loc = reason.find("At:");
+			reason = "Interrupted a" + reason.substr(loc+1);
+			}
+		catchOut.clear();
 		throw std::runtime_error(reason);
 		}
 
@@ -280,8 +311,38 @@ void Server::on_close(websocketpp::connection_hdl hdl)
 
 int quit(void *)
 	{
+	std::cerr << "Server: setting python interrupt." << std::endl;
 	PyErr_SetInterrupt();
+	std::cerr << "Server: python interrupt set." << std::endl;
 	return -1;
+	}
+
+void Server::wait_for_websocket()
+	{
+	try {
+		wserver.clear_access_channels(websocketpp::log::alevel::all);
+		wserver.clear_error_channels(websocketpp::log::elevel::all);
+		
+		wserver.init_asio();
+		wserver.set_reuse_addr(true);
+		
+		wserver.set_socket_init_handler(bind(&Server::on_socket_init, this, ::_1,::_2));
+		wserver.set_message_handler(bind(&Server::on_message, this, ::_1, ::_2));
+		wserver.set_open_handler(bind(&Server::on_open,this,::_1));
+		wserver.set_close_handler(bind(&Server::on_close,this,::_1));
+		
+		wserver.listen(websocketpp::lib::asio::ip::tcp::v4(), run_on_port);
+		wserver.start_accept();
+		websocketpp::lib::asio::error_code ec;
+		auto p = wserver.get_local_endpoint(ec);
+		std::cout << p.port()  << std::endl;
+		std::cout << authentication_token << std::endl;
+		wserver.run();
+		}
+	catch(websocketpp::exception& ex) {
+		std::cerr << "Server: websocket exception " << ex.code() << " " << ex.what() << std::endl;
+		throw;
+		}
 	}
 
 void Server::wait_for_job()
@@ -365,10 +426,19 @@ void Server::wait_for_job()
 
 void Server::stop_block()
 	{
-	PyGILState_STATE state = PyGILState_Ensure();
-	//	PyThreadState_SetAsyncExc ?
-	Py_AddPendingCall(&quit, NULL);
-	PyGILState_Release(state);
+//	interrupt_block=true;
+	std::cerr << "Server: sending SIGINT to python thread." << std::endl;
+	PyErr_SetInterrupt();
+
+	// PyGILState_STATE state = PyGILState_Ensure();
+	// //	PyThreadState_SetAsyncExc ?
+	// Py_AddPendingCall(&quit, NULL);
+	// PyGILState_Release(state);
+
+//	PyGILState_STATE state = PyGILState_Ensure();
+//	std::cerr << "Server: make thread " << main_thread_id << " raise exception" << std::endl;
+//	PyThreadState_SetAsyncExc(main_thread_id, PyExc_Exception);
+//	PyGILState_Release(state);
 	}
 
 Server::Block::Block(websocketpp::connection_hdl h, const std::string& str, uint64_t id_, const std::string& msg_type_)
@@ -437,10 +507,12 @@ void Server::dispatch_message(websocketpp::connection_hdl hdl, const std::string
 		}
 	else if(msg_type=="execute_interrupt") {
 		std::unique_lock<std::mutex> lock(block_available_mutex);
+		std::cerr << "Server: requesting python thread stop." << std::endl;
 		stop_block();
-		//		std::cout << "clearing block queue" << std::endl;
+		std::cerr << "Server: clearing block queue." << std::endl;
 		std::queue<Block> empty;
 		std::swap(block_queue, empty);
+		std::cerr << "Server: block queue cleared." << std::endl;
 		//snoop::log(snoop::warn) << "Job stop requested." << snoop::flush;
 		}
 	else if(msg_type=="init") {
@@ -508,15 +580,21 @@ bool Server::handles(const std::string& otype) const
 	return false;
 	}
 
-uint64_t Server::send(const std::string& output, const std::string& msg_type, uint64_t parent_id, bool last)
+uint64_t Server::send(const std::string& output, const std::string& msg_type,
+							 uint64_t parent_id, uint64_t cell_id, bool last)
 	{
 	// This is the function exposed to the Python side; not used
 	// directly in the server to send block output back to the client
 	// (that's all handled by on_block_finished above).
 
+	// std::cerr << "Send: " << msg_type << ", " << output.substr(0, std::min(size_t(40), output.size())) << std::endl;
+	
 	nlohmann::json json, header, content;
 
-	auto return_cell_id=cadabra::generate_uuid<uint64_t>();
+	uint64_t return_cell_id=cell_id;
+	if(return_cell_id==0)
+		return_cell_id=cadabra::generate_uuid<uint64_t>();
+	
 	if(parent_id==0)
 		header["parent_id"]=current_id;
 	else
@@ -627,39 +705,20 @@ void Server::on_kernel_fault(Block blk)
 
 void Server::run(int port, bool eod)
 	{
-	exit_on_disconnect=eod;
-	try {
-		wserver.clear_access_channels(websocketpp::log::alevel::all);
-		wserver.clear_error_channels(websocketpp::log::elevel::all);
+	exit_on_disconnect = eod;
+	run_on_port = port;
 
-		wserver.init_asio();
-		wserver.set_reuse_addr(true);
+	// Python has to be running on the main thread, otherwise
+	// it cannot receive signals. So we spawn the websocket
+	// listener on a separate thread, and then do the blocking
+	// "wait for python code to execute" loop on the main
+	// thread.
 
-		wserver.set_socket_init_handler(bind(&Server::on_socket_init, this, ::_1,::_2));
-		wserver.set_message_handler(bind(&Server::on_message, this, ::_1, ::_2));
-		wserver.set_open_handler(bind(&Server::on_open,this,::_1));
-		wserver.set_close_handler(bind(&Server::on_close,this,::_1));
+//	std::thread::id tmp= std::this_thread::get_id();	
+//	main_thread_id = *(unsigned *)&tmp;
+//	std::cerr << "Server: main_thread_id = " << main_thread_id << std::endl;
+	runner = std::thread(std::bind(&Server::wait_for_websocket, this));
 
-#ifdef DEBUG
-		std::cerr << "going to listen" << std::endl;
-#endif
-		wserver.listen(websocketpp::lib::asio::ip::tcp::v4(), port);
-#ifdef DEBUG
-		std::cerr << "going to accept" << std::endl;
-#endif
-		wserver.start_accept();
-		websocketpp::lib::asio::error_code ec;
-		auto p = wserver.get_local_endpoint(ec);
-		std::cout << p.port()  << std::endl;
-		std::cout << authentication_token << std::endl;
-
-		// std::cerr << "cadabra-server: spawning job thread "  << std::endl;
-		runner = std::thread(std::bind(&Server::wait_for_job, this));
-
-		pybind11::gil_scoped_release release;
-		wserver.run();
-		}
-	catch(websocketpp::exception& ex) {
-		std::cerr << "cadabra-server: websocket exception " << ex.code() << " " << ex.what() << std::endl;
-		}
+	wait_for_job();
+//		pybind11::gil_scoped_release release;
 	}
