@@ -159,32 +159,6 @@ namespace cadabra {
 		      pybind11::arg("depth") = depth,
 		      pybind11::doc(read_manual("algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
-		
-		// Extend algorithms to work with ExNodes directly
-		m.def(name,
-		      &apply_algo_node<Algo, Args...>,
-		      pybind11::arg("node"),
-		      std::forward<PyArgs>(pyargs)...,
-		      pybind11::arg("deep") = deep,
-		      pybind11::arg("repeat") = repeat,
-		      pybind11::arg("depth") = depth,
-		      pybind11::doc(read_manual("algorithms", name).c_str()),
-		      pybind11::return_value_policy::reference_internal);
-
-		}
-	/*
-	template<class Algo, typename... Args, typename... PyArgs>
-	void def_algo_node(pybind11::module& m, const char* name, bool deep, bool repeat, unsigned int depth, PyArgs... pyargs)
-		{
-		m.def(name,
-		      &apply_algo_node<Algo, Args...>,
-		      pybind11::arg("node"),
-		      std::forward<PyArgs>(pyargs)...,
-		      pybind11::arg("deep") = deep,
-		      pybind11::arg("repeat") = repeat,
-		      pybind11::arg("depth") = depth,
-		      pybind11::doc(read_manual("algorithms", name).c_str()),
-		      pybind11::return_value_policy::reference_internal);
 		}
 	*/
 
@@ -257,16 +231,7 @@ namespace cadabra {
 		      pybind11::arg("depth") = depth,
 		      pybind11::doc(read_manual(m, "algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
-		/* Because of the way apply_pre_order is implemented, below doesn't do anything yet
-		m.def(name,
-		      &apply_algo_preorder_node<Algo, Args...>,
-		      pybind11::arg("node"),
-		      std::forward<PyArgs>(pyargs)...,
-		      pybind11::arg("deep") = deep,
-		      pybind11::arg("repeat") = repeat,
-		      pybind11::arg("depth") = depth,
-		      pybind11::doc(read_manual("algorithms", name).c_str()),
-		      pybind11::return_value_policy::reference_internal);
+			  
 		/* Because of the way apply_pre_order is implemented, below doesn't do anything yet
 		m.def(name,
 		      &apply_algo_preorder_node<Algo, Args...>,
