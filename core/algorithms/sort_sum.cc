@@ -55,6 +55,7 @@ Algorithm::result_t sort_sum::apply(iterator& st)
 		sibs[0].node->prev_sibling = 0;
 		sibs[num-1].node->next_sibling = 0;
 		}
+
 	return ret;
 
 	}
