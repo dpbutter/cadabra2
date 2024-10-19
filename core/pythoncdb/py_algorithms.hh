@@ -231,6 +231,7 @@ namespace cadabra {
 		      pybind11::arg("depth") = depth,
 		      pybind11::doc(read_manual(m, "algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
+			  
 		/* Because of the way apply_pre_order is implemented, below doesn't do anything yet
 		m.def(name,
 		      &apply_algo_preorder_node<Algo, Args...>,
