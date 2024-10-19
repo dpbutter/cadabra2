@@ -149,7 +149,10 @@ namespace cadabra {
 			/// Initialise with given string as head node (does not parse this string).
 			Ex(const std::string&);
 			Ex(int);
+			Ex(float);
 
+			Ex& operator=(Ex);
+			
 			/// Keeping track of what algorithms have done to this expression.
 			/// After a reset_state (or at initialisation), the expression sits
 			/// in the 'checkpointed' state. When an algorithm acts, it can then

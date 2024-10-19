@@ -126,9 +126,11 @@ std::string cadabra::latex_to_html(const std::string& str)
 	std::regex ftableau(R"(\\ftableau\{(\{[^\}]*\}[,]?)*\})");
 	std::regex begin_tabular(R"(\\begin\{tabular\}\{[^\}]*\})");
 	std::regex end_tabular(R"(\\end\{tabular\})");
+	std::regex hash_in_math(R"((\\begin\{dmath\*\}.*)\\#(\\end\{dmath\*\}))");
 	std::string res;
 
 	try {
+		res = std::regex_replace(res, hash_in_math, "$1#$2");
 		res = std::regex_replace(str, begin_dmath, R"(\(\displaystyle)");
 		res = std::regex_replace(res, discretionary, " ");
 		res = std::regex_replace(res, end_dmath, R"(\))");
@@ -216,6 +218,9 @@ void cadabra::HTML_recurse(const DTree& doc, DTree::iterator it, std::ostringstr
 		case DataCell::CellType::image_png:
 			str << "<div class='image_png'><img src='data:image/png;base64,";
 			break;
+		case DataCell::CellType::image_svg:
+			str << "<div class='image_svg'><img src='data:image/svg+xml;base64,";
+			break;
 		case DataCell::CellType::input_form:
 			str << "<div class='input_form'>";
 			break;
@@ -226,14 +231,21 @@ void cadabra::HTML_recurse(const DTree& doc, DTree::iterator it, std::ostringstr
 			if(it->textbuf.size()>0) {
 				if(it->cell_type==DataCell::CellType::image_png)
 					str << it->textbuf;
+				else if(it->cell_type==DataCell::CellType::image_svg)
+					str << it->textbuf;
 				else if(it->cell_type!=DataCell::CellType::document && it->cell_type!=DataCell::CellType::latex) {
 					std::string out;
 					if(it->cell_type==DataCell::CellType::python)
 						out=it->textbuf;
 					else
 						out=latex_to_html(it->textbuf);
-					if(out.size()>0)
+					if(out.size()>0) {
+						if(it->cell_type==DataCell::CellType::python) {
+							out = std::regex_replace(out, std::regex("<"), "&lt;");
+							out = std::regex_replace(out, std::regex(">"), "&gt;");
+							}
 						str << "<div class=\"source donthyphenate\">"+out+"</div>";
+						}
 					}
 				}
 			}
@@ -284,6 +296,9 @@ void cadabra::HTML_recurse(const DTree& doc, DTree::iterator it, std::ostringstr
 		case DataCell::CellType::image_png:
 			str << "' /></div>\n";
 			break;
+		case DataCell::CellType::image_svg:
+			str << "' /></div>\n";
+			break;
 		case DataCell::CellType::input_form:
 			str << "</div>\n";
 		}
@@ -327,6 +342,9 @@ void cadabra::JSON_recurse(const DTree& doc, DTree::iterator it, nlohmann::json&
 			break;
 		case DataCell::CellType::image_png:
 			json["cell_type"]="image_png";
+			break;
+		case DataCell::CellType::image_svg:
+			json["cell_type"]="image_svg";
 			break;
 		case DataCell::CellType::input_form:
 			json["cell_type"]="input_form";
@@ -378,13 +396,19 @@ void cadabra::JSON_deserialise(const std::string& cj, DTree& doc)
 		root=nlohmann::json::parse(cj);
 		}
 	catch(nlohmann::json::exception& e) {
-		std::cerr << "cannot parse json file" << std::endl;
+		std::cerr << "Cannot parse json file." << std::endl;
 		return;
 		}
 
 	// Setup main document.
 	DataCell::id_t id;
-	id.id=root.value("cell_id", generate_uuid<uint64_t>());
+	try {
+		id.id=root.value("cell_id", generate_uuid<uint64_t>());
+		}
+	catch(nlohmann::json::exception& e) {
+		std::cerr << "Failed to find root-level 'cell_id' element (must be an integer)." << std::endl;
+		return;
+		}
 	DataCell top(id, DataCell::CellType::document);
 	DTree::iterator doc_it = doc.set_head(top);
 
@@ -485,6 +509,10 @@ void cadabra::JSON_in_recurse(DTree& doc, DTree::iterator loc, const nlohmann::j
 				DataCell dc(id, cadabra::DataCell::CellType::image_png, textbuf.get<std::string>(), hide);
 				last=doc.append_child(loc, dc);
 				}
+			else if(cell_type=="image_svg") {
+				DataCell dc(id, cadabra::DataCell::CellType::image_svg, textbuf.get<std::string>(), hide);
+				last=doc.append_child(loc, dc);
+				}
 			else {
 				std::cerr << "cadabra-client: found unknown cell type '"+cell_type+"', ignoring" << std::endl;
 				continue;
@@ -561,7 +589,8 @@ void cadabra::LaTeX_recurse(const DTree& doc, DTree::iterator it, std::ostringst
 			break;
 		case DataCell::CellType::input_form:
 			break;
-		case DataCell::CellType::image_png:
+ 		case DataCell::CellType::image_png:
+ 		case DataCell::CellType::image_svg:
 			std::size_t pos=image_file_base.rfind('/');
 			std::string fileonly=image_file_base.substr(pos+1);
 			str << "\\begin{center}\n\\includegraphics[width=.6\\textwidth]{"
@@ -575,6 +604,20 @@ void cadabra::LaTeX_recurse(const DTree& doc, DTree::iterator it, std::ostringst
 		// LaTeX has no concept of images embedded in the .tex file.
 		std::ofstream out(image_file_base+std::to_string(image_num)+".png");
 		out << base64_decode(it->textbuf);
+		++image_num;
+		}
+	else if(it->cell_type==DataCell::CellType::image_svg) {
+		// Images have to be saved to disk as separate files as
+		// LaTeX has no concept of images embedded in the .tex file.
+		std::string basename=image_file_base+std::to_string(image_num);
+		std::ofstream out(basename+".svg");
+		out << base64_decode(it->textbuf);
+		out.close();
+		// Convert to pdf, otherwise LaTeX cannot include it.
+      //		inkscape t.svg --export-pdf=t.pdf
+		int res = system((std::string("inkscape ")+basename+std::string(".svg --export-pdf=")+basename+std::string(".pdf")).c_str());
+		if(res!=0)
+			throw std::logic_error("DataCell::LaTeX_recurse: failed to run 'convert' to convert svg to pdf.");
 		++image_num;
 		}
 	else {
@@ -597,7 +640,8 @@ void cadabra::LaTeX_recurse(const DTree& doc, DTree::iterator it, std::ostringst
 				lr=std::regex_replace(lr, std::regex(R"(\\begin\{dmath\*\})"),  "\\begin{adjustwidth}{1em}{0cm}$");
 				lr=std::regex_replace(lr, std::regex(R"(\\end\{dmath\*\})"),    "$\\end{adjustwidth}");
 				lr=std::regex_replace(lr, std::regex(R"(\\algorithm\{(.*)_(.*)\})"), "\\algorithm{$1\\textunderscore{}$2}");
-				lr=std::regex_replace(lr, std::regex(R"(\\algorithm\{(.*)_(.*)\})"), "\\algorithm{$1\\textunderscore{}$2}");				
+				lr=std::regex_replace(lr, std::regex(R"(\\algorithm\{(.*)_(.*)\})"), "\\algorithm{$1\\textunderscore{}$2}");
+				lr=std::regex_replace(lr, std::regex(R"(🍅)"), "*");
 				str << lr << "\n";
 				}
 			}
@@ -617,6 +661,7 @@ void cadabra::LaTeX_recurse(const DTree& doc, DTree::iterator it, std::ostringst
 		case DataCell::CellType::input_form:
 		case DataCell::CellType::error:
 		case DataCell::CellType::image_png:
+		case DataCell::CellType::image_svg:
 			break;
 		}
 
@@ -642,6 +687,7 @@ void cadabra::LaTeX_recurse(const DTree& doc, DTree::iterator it, std::ostringst
 		case DataCell::CellType::input_form:
 		case DataCell::CellType::error:
 		case DataCell::CellType::image_png:
+		case DataCell::CellType::image_svg:
 			break;
 		}
 
@@ -658,7 +704,7 @@ std::string cadabra::export_as_python(const DTree& doc)
 void cadabra::python_recurse(const DTree& doc, DTree::iterator it, std::ostringstream& str)
 	{
 	if(it->cell_type==DataCell::CellType::document)
-		str << "#!/usr/local/bin/cadabra2\n";
+		str << "#!/usr/bin/env cadabra2\n";
 	else {
 		if(it->cell_type==DataCell::CellType::python) {
 			if(it->textbuf.size()>0) {

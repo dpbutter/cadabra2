@@ -131,7 +131,7 @@ namespace cadabra {
 		      pybind11::arg("deep") = deep,
 		      pybind11::arg("repeat") = repeat,
 		      pybind11::arg("depth") = depth,
-		      pybind11::doc(read_manual("algorithms", name).c_str()),
+		      pybind11::doc(read_manual(m, "algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
 		
 		// Extend algorithms to work with ExNodes directly
@@ -229,7 +229,7 @@ namespace cadabra {
 		      pybind11::arg("deep") = deep,
 		      pybind11::arg("repeat") = repeat,
 		      pybind11::arg("depth") = depth,
-		      pybind11::doc(read_manual("algorithms", name).c_str()),
+		      pybind11::doc(read_manual(m, "algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
 		/* Because of the way apply_pre_order is implemented, below doesn't do anything yet
 		m.def(name,

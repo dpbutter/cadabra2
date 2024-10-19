@@ -130,6 +130,11 @@ void ComputeThread::terminate()
 		}
 	}
 
+bool ComputeThread::kernel_is_connected() const
+	{
+	return connection_is_open;
+	}
+
 void ComputeThread::all_cells_nonrunning()
 	{
 	for(auto it: running_cells) {
@@ -182,9 +187,17 @@ void ComputeThread::try_spawn_server()
 
 	std::vector<std::string> argv, envp;
 #if defined(_WIN32) || defined(_WIN64)
-	argv.push_back(cadabra::install_prefix()+"\\bin\\cadabra-server.exe");
+	argv.push_back("cadabra-server.exe");
 #else
-	argv.push_back("cadabra-server");
+	const char *appdir = getenv("APPDIR");
+	if(appdir) {
+		// std::cerr << "This is an AppImage, APPDIR = " << appdir << std::endl;
+		argv.push_back(std::string(appdir)+"/usr/bin/cadabra-server");
+		}
+	else {
+		// std::cerr << "Not an AppImage." << std::endl;
+		argv.push_back("cadabra-server");
+		}
 #endif
 	Glib::Pid pid;
 	std::string wd("");
@@ -223,8 +236,10 @@ void ComputeThread::on_open(websocketpp::connection_hdl )
 	{
 	connection_is_open=true;
 	restarting_kernel=false;
-	if(gui)
+	if(gui) {
 		gui->on_connect();
+		gui->on_kernel_runstatus(false);
+		}
 
 	//	// now it is safe to use the connection
 	//	std::string msg;
@@ -252,8 +267,13 @@ void ComputeThread::on_close(websocketpp::connection_hdl )
 	connection_is_open=false;
 	all_cells_nonrunning();
 	if(gui) {
-		if(restarting_kernel) gui->on_disconnect("restarting kernel");
-		else                  gui->on_disconnect("not connected");
+		if(restarting_kernel) {
+			gui->on_disconnect("restarting kernel");
+			gui->on_kernel_runstatus(true);
+			}
+		else {
+			gui->on_disconnect("not connected");
+			}
 		}
 
 	sleep(1); // do not cause a torrent...
@@ -311,6 +331,8 @@ void ComputeThread::on_message(websocketpp::connection_hdl hdl, message_ptr msg)
 	else
 		cell_id.created_by_client=false;
 	// std::cerr << "received cell with id " << cell_id.id << std::endl;
+
+	// Determine if this refers to a special cell in the interactive console.
 	if (interactive_cells.find(parent_id.id) != interactive_cells.end()) {
 		interactive_cells.insert(cell_id.id);
 		docthread->on_interactive_output(root);
@@ -422,6 +444,12 @@ void ComputeThread::on_message(websocketpp::connection_hdl hdl, message_ptr msg)
 					}
 				else if (msg_type == "image_png") {
 					DataCell result(cell_id, DataCell::CellType::image_png, content["output"].get<std::string>());
+					std::shared_ptr<ActionBase> action =
+					   std::make_shared<ActionAddCell>(result, parent_id, ActionAddCell::Position::child);
+					docthread->queue_action(action);
+					}
+				else if (msg_type == "image_svg") {
+					DataCell result(cell_id, DataCell::CellType::image_svg, content["output"].get<std::string>());
 					std::shared_ptr<ActionBase> action =
 					   std::make_shared<ActionAddCell>(result, parent_id, ActionAddCell::Position::child);
 					docthread->queue_action(action);
@@ -570,6 +598,7 @@ void ComputeThread::stop()
 
 	server_pid=0;
 	wsclient.send(our_connection_hdl, str.str(), websocketpp::frame::opcode::text);
+	all_cells_nonrunning();	
 	}
 
 void ComputeThread::restart_kernel()

@@ -31,7 +31,7 @@ Glib::RefPtr<Cadabra> Cadabra::create(int argc, char **argv)
 	}
 
 Cadabra::Cadabra(int argc, char **argv)
-	: Gtk::Application(argc, argv, "com.phi-sci.cadabra.Cadabra",
+	: Gtk::Application(argc, argv, "science.cadabra.cadabra2-gtk",
 	                   Gio::APPLICATION_HANDLES_OPEN |
 	                   Gio::APPLICATION_NON_UNIQUE),
 	  compute(0), compute_thread(0),
@@ -102,6 +102,11 @@ int Cadabra::on_handle_local_options(const Glib::RefPtr<Glib::VariantDict>& opti
 	get_arg_value(options, "token",       server_token);
 //	std::cerr << server_port << ", " << server_token << std::endl;
 	return -1;
+	}
+
+void Cadabra::on_startup()
+	{
+	Gtk::Application::on_startup();
 	}
 
 void Cadabra::on_activate()

@@ -14,6 +14,7 @@
 #include <gtkmm/aboutdialog.h>
 #include <gtkmm/radioaction.h>
 #include <gtkmm/scrollbar.h>
+#include <giomm/actiongroup.h>
 #include <fstream>
 #include <glib/gstdio.h>
 
@@ -27,12 +28,18 @@
 #include "process.hpp"
 #include <internal/string_tools.h>
 
+// For MicroTeX
+#include "cairo/graphic_cairo.h"
+#include "microtex.h"
+#include <pangomm/init.h>
+
 using namespace cadabra;
 
 // #define DEBUG 1
 
 NotebookWindow::NotebookWindow(Cadabra *c, bool ro)
-	: DocumentThread(this)
+	: Gtk::ApplicationWindow()
+	, DocumentThread(this)
 	, current_cell(doc.end())
 	, cdbapp(c)
 	, search_case_insensitive("Case insensitive", true)
@@ -65,10 +72,13 @@ NotebookWindow::NotebookWindow(Cadabra *c, bool ro)
 	// Query high-dpi settings. For all systems we can probe the
 	// HiDPI scale, and for some window managers we also probe the
 	// text scale factor.
+	auto display = Gdk::Display::get_default();
 	auto screen = Gdk::Screen::get_default();
 	scale = screen->get_monitor_scale_factor(0);
 	display_scale = scale;
+//	std::cerr << "Monitor scale factor = " << display_scale << std::endl;
 #ifndef __APPLE__
+	// FIXME: this does not work for ssh sessions with ForwardX11.
 	const char *ds = std::getenv("DESKTOP_SESSION");
 	if(ds) {
 		settings = Gio::Settings::create((strcmp(ds, "cinnamon") == 0) ? "org.cinnamon.desktop.interface" : "org.gnome.desktop.interface");
@@ -77,13 +87,81 @@ NotebookWindow::NotebookWindow(Cadabra *c, bool ro)
 #endif
 
 	engine.set_scale(scale, display_scale);
+	engine.set_font_size(12+(prefs.font_step*2));
 
+	// For MicroTeX
+//	Pango::init(); Gtk::Main supposedly calls this for us.
+	std::vector<std::string> font_paths;
+//	font_paths.push_back(install_prefix()+"/share/cadabra2/microtex/newcm/");	
+	font_paths.push_back(install_prefix()+"/share/cadabra2/microtex/lm-math/");	
+//	font_paths.push_back(install_prefix()+"/share/cadabra2/microtex/xits/");
+//	font_paths.push_back(install_prefix()+"/share/cadabra2/microtex/cm/");	
+
+	// Need to re-convert fonts setting the correct
+
+//	for(const std::string& path: font_paths)
+//		std::cerr << "Will search " << path << " for fonts." << std::endl;
+	
+	microtex::MicroTeX::setDefaultMathFont("LatinModernMath-Regular");
+	auto auto_init = microtex::InitFontSenseAuto();
+//	std::cerr << "microtex::InitFontSenseAuto done" << std::endl;
+	auto_init.search_paths=font_paths;
+	microtex::Init init = auto_init;
+	microtex::MicroTeX::init(init);
+	microtex::MicroTeX::setDefaultMathFont("LatinModernMath-Regular");
+
+   // Add all the CMR fonts (as one family). See the url below for
+	// a list of all fonts with their standard names:
+	//
+	// https://usemodify.com/fonts/computer-modern/
+	
+	const microtex::FontSrcFile font_rm
+		= microtex::FontSrcFile(install_prefix()+"/share/cadabra2/microtex/cm/cmunrm.clm1",
+										install_prefix()+"/share/cadabra2/microtex/cm/cmunrm.otf");
+	const microtex::FontSrcFile font_tt
+		= microtex::FontSrcFile(install_prefix()+"/share/cadabra2/microtex/cm/cmuntt.clm1",
+										install_prefix()+"/share/cadabra2/microtex/cm/cmuntt.otf");
+	const microtex::FontSrcFile font_tt_bf
+		= microtex::FontSrcFile(install_prefix()+"/share/cadabra2/microtex/cm/cmuntb.clm1",
+										install_prefix()+"/share/cadabra2/microtex/cm/cmuntb.otf");
+	const microtex::FontSrcFile font_bf
+		= microtex::FontSrcFile(install_prefix()+"/share/cadabra2/microtex/cm/cmunbx.clm1",
+										install_prefix()+"/share/cadabra2/microtex/cm/cmunbx.otf");
+	const microtex::FontSrcFile font_it
+		= microtex::FontSrcFile(install_prefix()+"/share/cadabra2/microtex/cm/cmunti.clm1",
+										install_prefix()+"/share/cadabra2/microtex/cm/cmunti.otf");
+	const microtex::FontSrcFile font_it_bf
+		= microtex::FontSrcFile(install_prefix()+"/share/cadabra2/microtex/cm/cmunbi.clm1",
+										install_prefix()+"/share/cadabra2/microtex/cm/cmunbi.otf");
+
+	microtex::MicroTeX::addFont(font_rm,    "Computer Modern");
+	microtex::MicroTeX::addFont(font_tt,    "Computer Modern");
+	microtex::MicroTeX::addFont(font_tt_bf, "Computer Modern"); // FIXME: incorrect
+	microtex::MicroTeX::addFont(font_bf,    "Computer Modern");
+	microtex::MicroTeX::addFont(font_it,    "Computer Modern");
+	microtex::MicroTeX::addFont(font_it_bf, "Computer Modern");
+	
+	microtex::MicroTeX::setDefaultMainFont("Computer Modern");
+	microtex::PlatformFactory::registerFactory("gtk", std::make_unique<microtex::PlatformFactory_cairo>());
+	microtex::PlatformFactory::activate("gtk");
+
+	// std::cerr << "MicroTeX::hasGlyphPathRender = " << microtex::MicroTeX::hasGlyphPathRender() << std::endl;
+	// std::cerr << "Math fonts:" << std::endl;
+	// for(const auto& n: microtex::MicroTeX::mathFontNames()) {
+	// 	std::cerr << "   " << n << std::endl;
+	// 	}
+	// std::cerr << "Main fonts:" << std::endl;
+	// for(const auto& n: microtex::MicroTeX::mainFontFamilies()) {
+	// 	std::cerr << "   " << n << std::endl;
+	// 	}
+	
 #ifndef __APPLE__
 	if(ds) {
 		settings->signal_changed().connect(
 		   sigc::mem_fun(*this, &NotebookWindow::on_text_scaling_factor_changed));
 		}
 #endif
+
 
 	// Setup styling. Note that 'margin-left' and so on do not work; you need
 	// to use 'padding'. However, 'padding-top' fails because it does not make the
@@ -100,330 +178,525 @@ NotebookWindow::NotebookWindow(Cadabra *c, bool ro)
 	Gtk::StyleContext::add_provider_for_screen(screen, css_provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
 	// Setup menu.
-	actiongroup = Gtk::ActionGroup::create();
-	actiongroup->add( Gtk::Action::create("MenuFile", "_File") );
-	actiongroup->add( Gtk::Action::create("New", Gtk::Stock::NEW), Gtk::AccelKey("<control>N"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_new) );
-	actiongroup->add( Gtk::Action::create("Open", Gtk::Stock::OPEN), Gtk::AccelKey("<control>O"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_open) );
-	actiongroup->add( Gtk::Action::create("Close", Gtk::Stock::CLOSE), Gtk::AccelKey("<control>W"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_close) );
-	actiongroup->add( Gtk::Action::create("Save", Gtk::Stock::SAVE), Gtk::AccelKey("<control>S"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_save) );
-	actiongroup->add( Gtk::Action::create("SaveAs", Gtk::Stock::SAVE_AS), Gtk::AccelKey("<control><shift>S"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_save_as) );
-	actiongroup->add( Gtk::Action::create("ExportAsJupyter", "Export as Jupyter notebook"),
-							sigc::mem_fun(*this, &NotebookWindow::on_file_save_as_jupyter));
-	actiongroup->add( Gtk::Action::create("ExportHtml", "Export to standalone HTML"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_export_html) );
-	actiongroup->add( Gtk::Action::create("ExportHtmlSegment", "Export to HTML segment"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_export_html_segment) );
-	actiongroup->add( Gtk::Action::create("ExportLaTeX", "Export to standalone LaTeX"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_export_latex) );
-	actiongroup->add( Gtk::Action::create("ExportPython", "Export to Python/Cadabra source"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_export_python) );
-	actiongroup->add( Gtk::Action::create("Quit", Gtk::Stock::QUIT),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_file_quit) );
+	actiongroup = Gio::SimpleActionGroup::create();
 
-	actiongroup->add( Gtk::Action::create("MenuEdit", "_Edit") );
-	actiongroup->add( Gtk::Action::create("EditUndo", Gtk::Stock::UNDO), Gtk::AccelKey("<control>Z"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_undo) );
-	action_copy = Gtk::Action::create("EditCopy", Gtk::Stock::COPY);
-	actiongroup->add( action_copy, Gtk::AccelKey("<control>C"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_copy) );
-	action_copy->set_sensitive(false);
-	actiongroup->add( Gtk::Action::create("EditPaste", Gtk::Stock::PASTE), Gtk::AccelKey("<control>V"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_paste) );
-	actiongroup->add( Gtk::Action::create("EditInsertAbove", "Insert cell above"), Gtk::AccelKey("<alt>Up"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_insert_above) );
-	actiongroup->add( Gtk::Action::create("EditInsertBelow", "Insert cell below"), Gtk::AccelKey("<alt>Down"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_insert_below) );
-	actiongroup->add( Gtk::Action::create("EditDelete", "Delete cell"), Gtk::AccelKey("<ctrl>Delete"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_delete) );
-	actiongroup->add( Gtk::Action::create("EditSplit", "Split cell"), Gtk::AccelKey("<control>Return"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_split) );
-	actiongroup->add( Gtk::Action::create("EditFind", Gtk::Stock::FIND), Gtk::AccelKey("<control>F"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_find) );
-	actiongroup->add( Gtk::Action::create("EditFindNext", "Find next"), Gtk::AccelKey("<control>G"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_search_text_changed) );
-	actiongroup->add( Gtk::Action::create("EditMakeCellTeX", "Cell is LaTeX"), Gtk::AccelKey("<control><shift>L"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_cell_is_latex) );
-	actiongroup->add( Gtk::Action::create("EditMakeCellPython", "Cell is Cadabra/Python"), Gtk::AccelKey("<control><shift>P"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_edit_cell_is_python) );
-	actiongroup->add( Gtk::Action::create("EditIgnoreCellOnImport", "Ignore cell on import"), Gtk::AccelKey("<control><shift>I"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_ignore_cell_on_import) );
+	// File menu actions.
+	actiongroup->add_action( "New",                   sigc::mem_fun(*this, &NotebookWindow::on_file_new) );
+	actiongroup->add_action( "Open",                  sigc::mem_fun(*this, &NotebookWindow::on_file_open) );
+	actiongroup->add_action( "Close",                 sigc::mem_fun(*this, &NotebookWindow::on_file_close) );
+	actiongroup->add_action( "Save",                  sigc::mem_fun(*this, &NotebookWindow::on_file_save) );
+	actiongroup->add_action( "SaveAs",                sigc::mem_fun(*this, &NotebookWindow::on_file_save_as) );
+	actiongroup->add_action( "ExportAsJupyter",       sigc::mem_fun(*this, &NotebookWindow::on_file_save_as_jupyter) );
+	actiongroup->add_action( "ExportHtml",            sigc::mem_fun(*this, &NotebookWindow::on_file_export_html) );
+	actiongroup->add_action( "ExportHtmlSegment",     sigc::mem_fun(*this, &NotebookWindow::on_file_export_html_segment) );
+	actiongroup->add_action( "ExportLaTeX",           sigc::mem_fun(*this, &NotebookWindow::on_file_export_latex) );
+	actiongroup->add_action( "ExportPython",          sigc::mem_fun(*this, &NotebookWindow::on_file_export_python) );
+	actiongroup->add_action( "Quit",                  sigc::mem_fun(*this, &NotebookWindow::on_file_quit) );
 
-	actiongroup->add( Gtk::Action::create("MenuView", "_View") );
-	actiongroup->add( Gtk::Action::create("ViewSplit", "Split view"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_view_split) );
-	actiongroup->add( Gtk::Action::create("ViewClose", "Close view"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_view_close) );
+	// Edit menu actions.
+	actiongroup->add_action( "EditUndo" ,             sigc::mem_fun(*this, &NotebookWindow::on_edit_undo) );
+	action_copy = Gio::SimpleAction::create("EditCopy");
+	action_copy->signal_activate().connect( sigc::mem_fun(*this, &NotebookWindow::on_edit_copy) );
+	action_copy->set_enabled(false);
+	actiongroup->add_action( action_copy );
+	actiongroup->add_action( "EditPaste",             sigc::mem_fun(*this, &NotebookWindow::on_edit_paste) );
+	actiongroup->add_action( "EditInsertAbove",       sigc::mem_fun(*this, &NotebookWindow::on_edit_insert_above) );
+	actiongroup->add_action( "EditInsertBelow",       sigc::mem_fun(*this, &NotebookWindow::on_edit_insert_below) );
+	actiongroup->add_action( "EditDelete",            sigc::mem_fun(*this, &NotebookWindow::on_edit_delete) );
+	actiongroup->add_action( "EditSplit",             sigc::mem_fun(*this, &NotebookWindow::on_edit_split) );
+	actiongroup->add_action( "EditFind",              sigc::mem_fun(*this, &NotebookWindow::on_edit_find) );
+	actiongroup->add_action( "EditFindNext",          sigc::mem_fun(*this, &NotebookWindow::on_search_text_changed) );
+	actiongroup->add_action( "EditMakeCellTeX",       sigc::mem_fun(*this, &NotebookWindow::on_edit_cell_is_latex) );
+	actiongroup->add_action( "EditMakeCellPython",    sigc::mem_fun(*this, &NotebookWindow::on_edit_cell_is_python) );	
+	actiongroup->add_action( "EditIgnoreCellOnImport",sigc::mem_fun(*this, &NotebookWindow::on_ignore_cell_on_import) );	
 
-	Gtk::RadioAction::Group group_cv;
-	actiongroup->add(Gtk::Action::create("MenuConsoleVisibility", "Console"));
+	// View menu actions.
+	actiongroup->add_action( "ViewSplit",             sigc::mem_fun(*this, &NotebookWindow::on_view_split) );
+	actiongroup->add_action( "ViewClose",             sigc::mem_fun(*this, &NotebookWindow::on_view_close) );		
+	action_fontsize  = actiongroup->add_action_radio_integer( "FontSize",
+																				 sigc::mem_fun(*this, &NotebookWindow::on_prefs_font_size),
+																				 prefs.font_step );	
+	action_highlight = actiongroup->add_action_radio_integer( "HighlightSyntax",
+																				 sigc::mem_fun(*this, &NotebookWindow::on_prefs_highlight_syntax),
+																				 prefs.highlight );	
+	action_microtex = actiongroup->add_action_radio_integer( "MicroTeX",
+																				 sigc::mem_fun(*this, &NotebookWindow::on_prefs_microtex),
+																				 prefs.microtex );	
+	actiongroup->add_action( "HighlightChoose",       sigc::mem_fun(*this, &NotebookWindow::on_prefs_choose_colours) );		
+	actiongroup->add_action( "ViewUseDefaultSettings",sigc::mem_fun(*this, &NotebookWindow::on_prefs_use_defaults) );		
 
-	auto cv_action_hide = Gtk::RadioAction::create(group_cv, "ConsoleHide", "Hide");
-	cv_action_hide->property_value() = (int)Console::Position::Hidden;
-	actiongroup->add(cv_action_hide, sigc::bind(sigc::mem_fun(*this,
-		&NotebookWindow::on_prefs_set_cv), Console::Position::Hidden));
-	cv_action_hide->set_active();
+	// Evaluate menu actions.
+	actiongroup->add_action( "EvaluateCell",          sigc::mem_fun(*this, &NotebookWindow::on_run_cell) );
+	actiongroup->add_action( "EvaluateAll",           sigc::mem_fun(*this, &NotebookWindow::on_run_runall) );		
+	actiongroup->add_action( "EvaluateToCursor",      sigc::mem_fun(*this, &NotebookWindow::on_run_runtocursor) );		
+	action_stop = actiongroup->add_action( "EvaluateStop",  sigc::mem_fun(*this, &NotebookWindow::on_run_stop) );
 
-	auto cv_action_dockh = Gtk::RadioAction::create(group_cv, "ConsoleDockH", "Dock (Horizontal)");
-	cv_action_dockh->property_value() = (int)Console::Position::DockedH;
-	actiongroup->add(cv_action_dockh, sigc::bind(sigc::mem_fun(*this,
-		&NotebookWindow::on_prefs_set_cv), Console::Position::DockedH));
+	// Kernel menu actions.
+	actiongroup->add_action( "KernelRestart",         sigc::mem_fun(*this, &NotebookWindow::on_kernel_restart) );			
+	
+	// Tools menu actions.
+	actiongroup->add_action( "CompareFile",           sigc::mem_fun(*this, &NotebookWindow::compare_to_file) );
+	actiongroup->add_action( "CompareGitLatest",      sigc::mem_fun(*this, &NotebookWindow::compare_git_latest) );
+	actiongroup->add_action( "CompareGitChoose",      sigc::mem_fun(*this, &NotebookWindow::compare_git_choose) );
+	actiongroup->add_action( "CompareGitSpecific",    sigc::mem_fun(*this, &NotebookWindow::compare_git_specific) );
+	actiongroup->add_action( "CompareGitSelect",      sigc::mem_fun(*this, &NotebookWindow::select_git_path) );
+	action_console = actiongroup->add_action_radio_integer( "Console", sigc::mem_fun(*this, &NotebookWindow::on_prefs_set_cv), 0 );
+	actiongroup->add_action( "ToolsOptions",          sigc::mem_fun(*this, &NotebookWindow::on_tools_options) );
+	actiongroup->add_action( "ToolsClearCache",       sigc::mem_fun(*this, &NotebookWindow::on_tools_clear_cache) );	
+	
+   // Help menu actions.
+	actiongroup->add_action( "HelpAbout",             sigc::mem_fun(*this, &NotebookWindow::on_help_about) );
+	actiongroup->add_action( "HelpContext",           sigc::mem_fun(*this, &NotebookWindow::on_help) );
+	action_register = actiongroup->add_action( "HelpRegister",  sigc::mem_fun(*this, &NotebookWindow::on_help_register) );
+	action_register->set_enabled(!prefs.is_registered);
 
-	auto cv_action_dockv = Gtk::RadioAction::create(group_cv, "ConsoleDockV", "Dock (Vertical)");
-	cv_action_dockv->property_value() = (int)Console::Position::DockedV;
-	actiongroup->add(cv_action_dockv, sigc::bind(sigc::mem_fun(*this,
-		&NotebookWindow::on_prefs_set_cv), Console::Position::DockedV));
+	insert_action_group("cdb",  actiongroup);
 
-	auto cv_action_float = Gtk::RadioAction::create(group_cv, "ConsoleFloat", "Float");
-	cv_action_float->property_value() = (int)Console::Position::Floating;
-	actiongroup->add(cv_action_float, sigc::bind(sigc::mem_fun(*this,
-		&NotebookWindow::on_prefs_set_cv), Console::Position::Floating));
+	// Set shortcuts for actions.
+	cdbapp->set_accel_for_action("cdb.New",                    "<Primary>N");
+	cdbapp->set_accel_for_action("cdb.Open",                   "<Primary>O");
+	cdbapp->set_accel_for_action("cdb.Close",                  "<Primary>W");
+	cdbapp->set_accel_for_action("cdb.Save",                   "<Primary>S");
+	cdbapp->set_accel_for_action("cdb.Quit",                   "<Primary>Q");
+	cdbapp->set_accel_for_action("cdb.EditUndo",               "<Primary>Z");
+	cdbapp->set_accel_for_action("cdb.EditCopy",               "<Primary>C");
+	cdbapp->set_accel_for_action("cdb.EditPaste",              "<Primary>V");
+	cdbapp->set_accel_for_action("cdb.EditInsertAbove",        "<alt>Up");
+	cdbapp->set_accel_for_action("cdb.EditInsertBelow",        "<alt>Down");
+	cdbapp->set_accel_for_action("cdb.EditDelete",             "<ctrl>Delete");
+	cdbapp->set_accel_for_action("cdb.EditFind",               "<control>F");
+	cdbapp->set_accel_for_action("cdb.EditFindNext",           "<control>G");
+	cdbapp->set_accel_for_action("cdb.EditMakeCellTeX",        "<control><shift>L");
+	cdbapp->set_accel_for_action("cdb.EditMakeCellPython",     "<control><shift>P");
+	cdbapp->set_accel_for_action("cdb.EditIgnoreCellOnImport", "<control><shift>I");
+	cdbapp->set_accel_for_action("cdb.EditSplit",              "<control>Return");
+	cdbapp->set_accel_for_action("cdb.EvaluateCell",           "<shift>Return");
+	cdbapp->set_accel_for_action("cdb.KernelRestart",          "<control><alt>R");
+	cdbapp->set_accel_for_action("cdb.HelpContext",            "F1");
 
+	// Menu and toolbar layout.
+	uimanager = Gtk::Builder::create();
+	Glib::ustring ui_info="<interface></interface>";
 
-	Gtk::RadioAction::Group group_font_size;
+	if(!read_only) {
+		ui_info =
+	   "<interface>"
+	   "  <menu id='MenuBar'>"
+		"    <submenu>"
+	   "      <attribute name='label'>File</attribute>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>New</attribute>"
+		"          <attribute name='action'>cdb.New</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Open</attribute>"
+		"          <attribute name='action'>cdb.Open</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Close</attribute>"
+		"          <attribute name='action'>cdb.Close</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Save</attribute>"
+		"          <attribute name='action'>cdb.Save</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Save as...</attribute>"
+		"          <attribute name='action'>cdb.SaveAs</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Export as Jupyter notebook</attribute>"
+		"          <attribute name='action'>cdb.ExportAsJupyter</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Export as HTML</attribute>"
+		"          <attribute name='action'>cdb.ExportHtml</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Export as HTML segment</attribute>"
+		"          <attribute name='action'>cdb.ExportHtmlSegment</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Export as LaTex</attribute>"
+		"          <attribute name='action'>cdb.ExportLaTeX</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Export as Python</attribute>"
+		"          <attribute name='action'>cdb.ExportPython</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Quit</attribute>"
+		"          <attribute name='action'>cdb.Quit</attribute>"
+		"        </item>"
+		"      </section>"
+		"    </submenu>"
+		"    <submenu>"
+	   "      <attribute name='label'>Edit</attribute>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Undo</attribute>"
+		"          <attribute name='action'>cdb.EditUndo</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Copy</attribute>"
+		"          <attribute name='action'>cdb.EditCopy</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Paste</attribute>"
+		"          <attribute name='action'>cdb.EditPaste</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Insert above</attribute>"
+		"          <attribute name='action'>cdb.EditInsertAbove</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Insert below</attribute>"
+		"          <attribute name='action'>cdb.EditInsertBelow</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Delete cell</attribute>"
+		"          <attribute name='action'>cdb.EditDelete</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Split cell</attribute>"
+		"          <attribute name='action'>cdb.EditSplit</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Find</attribute>"
+		"          <attribute name='action'>cdb.EditFind</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Find next</attribute>"
+		"          <attribute name='action'>cdb.EditFindNext</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Make cell LaTeX</attribute>"
+		"          <attribute name='action'>cdb.EditMakeCellTeX</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Make cell Python</attribute>"
+		"          <attribute name='action'>cdb.EditMakeCellPython</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Ignore cell on import</attribute>"
+		"          <attribute name='action'>cdb.EditIgnoreCellOnImport</attribute>"
+		"        </item>"
+		"      </section>"
+		"    </submenu>"
+		"    <submenu>"
+	   "      <attribute name='label'>View</attribute>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Split view</attribute>"
+		"          <attribute name='action'>cdb.ViewSplit</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Close view</attribute>"
+		"          <attribute name='action'>cdb.ViewClose</attribute>"
+		"        </item>"
+		"      </section>"
+		"      <submenu>"
+		"        <attribute name='label'>Font size</attribute>"
+		"        <section>"
+	   "           <item>"
+		"              <attribute name='label'>Small</attribute>"
+		"              <attribute name='action'>cdb.FontSize</attribute>"
+		"              <attribute name='target' type='i'>-1</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Medium (default)</attribute>"
+		"              <attribute name='action'>cdb.FontSize</attribute>"
+		"              <attribute name='target' type='i'>0</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Large</attribute>"
+		"              <attribute name='action'>cdb.FontSize</attribute>"
+		"              <attribute name='target' type='i'>2</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Extra large</attribute>"
+		"              <attribute name='action'>cdb.FontSize</attribute>"
+		"              <attribute name='target' type='i'>4</attribute>"
+		"           </item>"
+		"        </section>"
+		"      </submenu>"
+		"      <submenu>"
+		"        <attribute name='label'>Highlighting</attribute>"
+		"        <section>"
+	   "           <item>"
+		"              <attribute name='label'>Highlighting off</attribute>"
+		"              <attribute name='action'>cdb.HighlightSyntax</attribute>"
+		"              <attribute name='target' type='i'>0</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Highlighting on</attribute>"
+		"              <attribute name='action'>cdb.HighlightSyntax</attribute>"
+		"              <attribute name='target' type='i'>1</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Choose colours</attribute>"
+		"              <attribute name='action'>cdb.HighlightChoose</attribute>"
+		"           </item>"
+		"        </section>"
+			"      </submenu>";
+		const char *appdir = getenv("APPDIR");
+		if(!appdir) {
+			ui_info+=
+				"      <submenu>"
+				"        <attribute name='label'>Maths rendering</attribute>"
+				"        <section>"
+				"           <item>"
+				"              <attribute name='label'>LaTeX (external)</attribute>"
+				"              <attribute name='action'>cdb.MicroTeX</attribute>"
+				"              <attribute name='target' type='i'>0</attribute>"
+				"           </item>"
+				"           <item>"
+				"              <attribute name='label'>MicroTeX (internal)</attribute>"
+				"              <attribute name='action'>cdb.MicroTeX</attribute>"
+				"              <attribute name='target' type='i'>1</attribute>"
+				"           </item>"
+				"        </section>"
+				"      </submenu>";
+			}
+	   ui_info +=
+		"      <item>"
+		"         <attribute name='label'>Use default settings</attribute>"
+		"         <attribute name='action'>cdb.ViewUseDefaultSettings</attribute>"
+		"      </item>"
+		"    </submenu>"
+		"    <submenu id='MenuEvaluate'>"
+	   "      <attribute name='label'>Evaluate</attribute>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Evaluate cell</attribute>"
+		"          <attribute name='action'>cdb.EvaluateCell</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Evaluate all</attribute>"
+		"          <attribute name='action'>cdb.EvaluateAll</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Evaluate to cursor</attribute>"
+		"          <attribute name='action'>cdb.EvaluateToCursor</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Stop evaluation</attribute>"
+		"          <attribute name='action'>cdb.EvaluateStop</attribute>"
+		"        </item>"
+		"      </section>"
+		"    </submenu>"
+		"    <submenu>"
+	   "      <attribute name='label'>Kernel</attribute>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Restart kernel</attribute>"
+		"          <attribute name='action'>cdb.KernelRestart</attribute>"
+		"        </item>"
+		"      </section>"
+		"    </submenu>"
+		"    <submenu>"
+	   "      <attribute name='label'>Tools</attribute>"
+		"      <submenu>"
+		"        <attribute name='label'>Compare</attribute>"
+		"        <section>"
+	   "           <item>"
+		"             <attribute name='label'>With other file</attribute>"
+		"             <attribute name='action'>cdb.CompareFile</attribute>"
+		"           </item>"
+	   "           <item>"
+		"             <attribute name='label'>Last commit</attribute>"
+		"             <attribute name='action'>cdb.CompareGitLatest</attribute>"
+		"           </item>"
+	   "           <item>"
+		"             <attribute name='label'>Select commit from list</attribute>"
+		"             <attribute name='action'>cdb.CompareGitChoose</attribute>"
+		"           </item>"
+	   "           <item>"
+		"             <attribute name='label'>Manually enter commit hash</attribute>"
+		"             <attribute name='action'>cdb.CompareGitSpecific</attribute>"
+		"           </item>"
+	   "           <item>"
+		"             <attribute name='label'>Select GIT binary</attribute>"
+		"             <attribute name='action'>cdb.CompareGitSelect</attribute>"
+		"           </item>"
+		"        </section>"
+		"      </submenu>"
+		"      <submenu>"
+		"        <attribute name='label'>Console</attribute>"
+		"        <section>"
+	   "           <item>"
+		"              <attribute name='label'>Hide</attribute>"
+		"              <attribute name='action'>cdb.Console</attribute>"
+		"              <attribute name='target' type='i'>0</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Dock (horizontal)</attribute>"
+		"              <attribute name='action'>cdb.Console</attribute>"
+		"              <attribute name='target' type='i'>1</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Dock (vertical)</attribute>"
+		"              <attribute name='action'>cdb.Console</attribute>"
+		"              <attribute name='target' type='i'>2</attribute>"
+		"           </item>"
+	   "           <item>"
+		"              <attribute name='label'>Floating</attribute>"
+		"              <attribute name='action'>cdb.Console</attribute>"
+		"              <attribute name='target' type='i'>3</attribute>"
+		"           </item>"
+		"        </section>"
+		"      </submenu>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>Options</attribute>"
+		"          <attribute name='action'>cdb.ToolsOptions</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Clear package cache</attribute>"
+		"          <attribute name='action'>cdb.ToolsClearCache</attribute>"
+		"        </item>"
+		"      </section>"
+		"    </submenu>"
+		"    <submenu>"
+	   "      <attribute name='label'>Help</attribute>"
+		"      <section>"
+	   "        <item>"
+		"          <attribute name='label'>About Cadabra</attribute>"
+		"          <attribute name='action'>cdb.HelpAbout</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Contextual help</attribute>"
+		"          <attribute name='action'>cdb.HelpContext</attribute>"
+		"        </item>"
+	   "        <item>"
+		"          <attribute name='label'>Register</attribute>"
+		"          <attribute name='action'>cdb.HelpRegister</attribute>"
+		"        </item>"
+		"      </section>"
+		"    </submenu>"
+		"  </menu>"
+	   "</interface>";
+		};
 
-	actiongroup->add( Gtk::Action::create("MenuFontSize", "Font size") );
-	auto font_action0=Gtk::RadioAction::create(group_font_size, "FontSmall", "Small");
-	font_action0->property_value()=-1;
-	actiongroup->add( font_action0, sigc::bind(sigc::mem_fun(*this, &NotebookWindow::on_prefs_font_size),-1 ));
-	if(prefs.font_step==-1) font_action0->set_active();
-
-	auto font_action1=Gtk::RadioAction::create(group_font_size, "FontMedium", "Medium (default)");
-	font_action1->property_value()= 0;
-	actiongroup->add( font_action1, sigc::bind(sigc::mem_fun(*this, &NotebookWindow::on_prefs_font_size), 0));
-	if(prefs.font_step==0) font_action1->set_active();
-	default_actions.push_back(font_action1);
-
-	auto font_action2=Gtk::RadioAction::create(group_font_size, "FontLarge", "Large");
-	font_action2->property_value()= 2;
-	actiongroup->add( font_action2, sigc::bind(sigc::mem_fun(*this, &NotebookWindow::on_prefs_font_size), 2));
-	if(prefs.font_step==2) font_action2->set_active();
-
-	auto font_action3=Gtk::RadioAction::create(group_font_size, "FontExtraLarge", "Extra large");
-	font_action3->property_value()= 4;
-	actiongroup->add( font_action3, sigc::bind(sigc::mem_fun(*this, &NotebookWindow::on_prefs_font_size), 4));
-	if(prefs.font_step==4) font_action3->set_active();
-
-	Gtk::RadioAction::Group group_highlight_syntax;
-	actiongroup->add(Gtk::Action::create("MenuHighlightSyntax", "Highlight Syntax"));
-
-	auto highlight_syntax_action0 = Gtk::RadioAction::create(group_highlight_syntax, "HighlightSyntaxOff", "Off (default)");
-	highlight_syntax_action0->property_value() = 0;
-	actiongroup->add(highlight_syntax_action0, sigc::bind(sigc::mem_fun(*this, &NotebookWindow::on_prefs_highlight_syntax), false));
-	if (prefs.highlight == false) highlight_syntax_action0->set_active();
-	default_actions.push_back(highlight_syntax_action0);
-
-	auto highlight_syntax_action1 = Gtk::RadioAction::create(group_highlight_syntax, "HighlightSyntaxOn", "On");
-	highlight_syntax_action1->property_value() = 1;
-	actiongroup->add(highlight_syntax_action1, sigc::bind(sigc::mem_fun(*this, &NotebookWindow::on_prefs_highlight_syntax), true));
-	if (prefs.highlight == true) highlight_syntax_action1->set_active();
-
-	actiongroup->add(Gtk::Action::create("HighlightSyntaxChoose", "Choose Colours..."), sigc::mem_fun(*this, &NotebookWindow::on_prefs_choose_colours));
-
-	actiongroup->add(Gtk::Action::create("ViewUseDefaultSettings", "Use Default Settings"), sigc::mem_fun(*this, &NotebookWindow::on_prefs_use_defaults));
-
-	actiongroup->add( Gtk::Action::create("MenuEvaluate", "_Evaluate") );
-	actiongroup->add( Gtk::Action::create("EvaluateCell", "Evaluate cell"), Gtk::AccelKey("<shift>Return"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_run_cell) );
-	actiongroup->add( Gtk::Action::create("EvaluateAll", Gtk::Stock::GO_FORWARD, "Evaluate all"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_run_runall) );
-	actiongroup->add( Gtk::Action::create("EvaluateToCursor", Gtk::Stock::GOTO_LAST, "Evaluate to cursor"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_run_runtocursor) );
-	actiongroup->add( Gtk::Action::create("EvaluateStop", Gtk::Stock::STOP, "Stop"), Gtk::AccelKey('.', Gdk::MOD1_MASK),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_run_stop) );
-	actiongroup->add( Gtk::Action::create("MenuKernel", "_Kernel") );
-	actiongroup->add( Gtk::Action::create("KernelRestart", Gtk::Stock::REFRESH, "Restart"), Gtk::AccelKey("<control><alt>R"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_kernel_restart) );
-
-	actiongroup->add(Gtk::Action::create("MenuTools", "Tools"));
-	actiongroup->add(Gtk::Action::create("ToolsCompare", "Compare"));
-	actiongroup->add(Gtk::Action::create("CompareFile", "Compare to file"),
-	                 sigc::mem_fun(*this, &NotebookWindow::compare_to_file));
-	actiongroup->add(Gtk::Action::create("CompareGit", "Compare with Git"));
-	actiongroup->add(Gtk::Action::create("CompareGitLatest", "Latest commit"),
-	                 sigc::mem_fun(*this, &NotebookWindow::compare_git_latest));
-	actiongroup->add(Gtk::Action::create("CompareGitChoose", "Select commit from list"),
-	                 sigc::mem_fun(*this, &NotebookWindow::compare_git_choose));
-	actiongroup->add(Gtk::Action::create("CompareGitSpecific", "Manually enter commit hash"),
-	                 sigc::mem_fun(*this, &NotebookWindow::compare_git_specific));
-	actiongroup->add(Gtk::Action::create("CompareSelectGit", "Select Git Executable"),
-	                 sigc::mem_fun(*this, &NotebookWindow::select_git_path));
-	actiongroup->add(Gtk::Action::create("ToolsOptions", "Options"),
-		sigc::mem_fun(*this, &NotebookWindow::on_tools_options));
-	actiongroup->add(Gtk::Action::create("ToolsClearCache", "Clear Cache"),
-		sigc::mem_fun(*this, &NotebookWindow::on_tools_clear_cache));
-
-	actiongroup->add( Gtk::Action::create("MenuHelp", "_Help") );
-	//	actiongroup->add( Gtk::Action::create("HelpNotebook", Gtk::Stock::HELP, "How to use the notebook"),
-	//							sigc::mem_fun(*this, &NotebookWindow::on_help_notebook) );
-	actiongroup->add( Gtk::Action::create("HelpAbout", Gtk::Stock::ABOUT, "About Cadabra"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_help_about) );
-	actiongroup->add( Gtk::Action::create("HelpContext", Gtk::Stock::HELP, "Contextual help"),
-	                  sigc::mem_fun(*this, &NotebookWindow::on_help) );
-	menu_help_register = Gtk::Action::create("HelpRegister", "Register");
-	actiongroup->add(menu_help_register, sigc::mem_fun(*this, &NotebookWindow::on_help_register));
-	menu_help_register->set_sensitive(!prefs.is_registered);
-
-	uimanager = Gtk::UIManager::create();
-	uimanager->insert_action_group(actiongroup);
-	add_accel_group(uimanager->get_accel_group());
-	Glib::ustring ui_info =
-	   "<ui>"
-	   "  <menubar name='MenuBar'>"
-	   "    <menu action='MenuFile'>"
-	   "      <menuitem action='New'/>"
-	   "      <menuitem action='Open'/>"
-	   "      <menuitem action='Close'/>"
-	   "      <separator/>"
-	   "      <menuitem action='Save'/>"
-	   "      <menuitem action='SaveAs'/>"
-	   "      <menuitem action='ExportAsJupyter'/>"
-	   "      <menuitem action='ExportHtml'/>"
-	   "      <menuitem action='ExportHtmlSegment'/>"
-	   "      <menuitem action='ExportLaTeX'/>"
-	   "      <menuitem action='ExportPython'/>"
-	   "      <separator/>"
-	   "      <menuitem action='Quit'/>"
-	   "    </menu>";
-	if(!read_only)
-		ui_info+=
-		   "    <menu action='MenuEdit'>"
-		   "      <menuitem action='EditUndo' />"
-		   "      <separator/>"
-		   "      <menuitem action='EditCopy' />"
-		   //		"      <menuitem action='EditPaste' />"
-		   "      <separator/>"
-		   "      <menuitem action='EditInsertAbove' />"
-		   "      <menuitem action='EditInsertBelow' />"
-		   "      <menuitem action='EditDelete' />"
-		   "      <separator/>"
-		   "      <menuitem action='EditSplit' />"
-		   "      <separator/>"
-		   "      <menuitem action='EditFind' />"
-		   "      <menuitem action='EditFindNext' />"
-		   "      <separator/>"
-		   "      <menuitem action='EditMakeCellTeX' />"
-		   "      <menuitem action='EditMakeCellPython' />"
-		   "      <menuitem action='EditIgnoreCellOnImport' />"
-		   "    </menu>"
-		   "    <menu action='MenuView'>"
-		   "      <menuitem action='ViewSplit' />"
-		   "      <menuitem action='ViewClose' />"
-		   "      <menu action='MenuFontSize'>"
-		   "         <menuitem action='FontSmall'/>"
-		   "         <menuitem action='FontMedium'/>"
-		   "         <menuitem action='FontLarge'/>"
-		   "         <menuitem action='FontExtraLarge'/>"
-		   "      </menu>"
-		   "      <separator/>"
-		   "      <menu action='MenuHighlightSyntax'>"
-		   "        <menuitem action='HighlightSyntaxOff'/>"
-		   "        <menuitem action='HighlightSyntaxOn'/>"
-		   "        <menuitem action='HighlightSyntaxChoose'/>"
-		   "      </menu>"
-		   "      <menu action='MenuConsoleVisibility'>"
-		   "        <menuitem action='ConsoleHide'/>"
-		   "        <menuitem action='ConsoleDockH'/>"
-			"        <menuitem action='ConsoleDockV'/>"
-		   "        <menuitem action='ConsoleFloat'/>"
-		   "      </menu>"
-		   "      <menuitem action='ViewUseDefaultSettings'/>"
-		   "    </menu>"
-		   "    <menu action='MenuEvaluate'>"
-		   "      <menuitem action='EvaluateCell' />"
-		   "      <menuitem action='EvaluateAll' />"
-		   "      <menuitem action='EvaluateToCursor' />"
-		   "      <separator/>"
-		   "      <menuitem action='EvaluateStop' />"
-		   "    </menu>"
-		   "    <menu action='MenuKernel'>"
-		   "      <menuitem action='KernelRestart' />"
-		   "    </menu>";
-	ui_info+=
-		"    <menu action='MenuTools'>"
-		"      <menu action='ToolsCompare'>"
-	   "        <menuitem action='CompareFile'/>"
-	   "        <menu action='CompareGit'>"
-	   "          <menuitem action='CompareGitLatest'/>"
-	   "          <menuitem action='CompareGitChoose'/>"
-	   "          <menuitem action='CompareGitSpecific'/>"
-	   "          <separator/>"
-	   "          <menuitem action='CompareSelectGit'/>"
-	   "        </menu>"
-	   "      </menu>"
-		"      <menuitem action='ToolsOptions'/>"
-		"      <menuitem action='ToolsClearCache'/>"
-		"    </menu>"
-	   "    <menu action='MenuHelp'>"
-	   //		"      <menuitem action='HelpNotebook' />"
-	   "      <menuitem action='HelpAbout' />"
-	   "      <menuitem action='HelpContext' />"
-	   "      <menuitem action='HelpRegister' />"
-	   "    </menu>"
-	   "  </menubar>"
-	   "  <toolbar name='ToolBar'>"
-		"    <toolitem name='New' action='New'/>"
-		"    <toolitem name='Open' action='Open' />"
-		"    <toolitem name='Save' action='Save' />"
-		"    <toolitem name='SaveAs' action='SaveAs' />"
-		"    <separator />"
-		"    <toolitem name='Undo' action='EditUndo' />"
-		"    <separator />"
-		"    <toolitem name='RunAll' action='EvaluateAll' />"
-		"    <toolitem name='EvaluateStop' action='EvaluateStop' />"
-	   "  </toolbar>"
-	   "</ui>";
-
-	uimanager->add_ui_from_string(ui_info);
-
-	uimanager->get_widget("/ToolBar/New")->set_tooltip_text("New notebook");
-	uimanager->get_widget("/ToolBar/Open")->set_tooltip_text("Open existing notebook");
-	uimanager->get_widget("/ToolBar/Save")->set_tooltip_text("Save changes");
-	uimanager->get_widget("/ToolBar/SaveAs")->set_tooltip_text("Save as new notebook");
-	uimanager->get_widget("/ToolBar/Undo")->set_tooltip_text("Undo");
-	uimanager->get_widget("/ToolBar/RunAll")->set_tooltip_text("Run all cells");
-	uimanager->get_widget("/ToolBar/EvaluateStop")->set_tooltip_text("Stop evaluation");
+	uimanager->add_from_string(ui_info);
 
 	// Main box structure dividing the window.
 	add(topbox);
-	Gtk::Widget *menubar = uimanager->get_widget("/MenuBar");
-	topbox.pack_start(*menubar, Gtk::PACK_SHRINK);
-	Gtk::Widget *toolbar = uimanager->get_widget("/ToolBar");
-	topbox.pack_start(*toolbar, Gtk::PACK_SHRINK);
+	Glib::RefPtr<Glib::Object> menubar_obj = uimanager->get_object("MenuBar");
+	Glib::RefPtr<Gio::Menu> gmenu = Glib::RefPtr<Gio::Menu>::cast_dynamic(menubar_obj);
+	Gtk::MenuBar* pMenuBar = Gtk::make_managed<Gtk::MenuBar>(gmenu);
+	topbox.pack_start(*pMenuBar, Gtk::PACK_SHRINK);
+
+	auto get_icon = [this](const std::string& nm) {
+		Glib::RefPtr<Gio::File> ff = Gio::File::create_for_path(nm);
+		Glib::RefPtr<Gio::FileInputStream> str = ff->read();
+		Glib::RefPtr<Gdk::Pixbuf> pb = Gdk::Pixbuf::create_from_stream_at_scale(str, 50/scale, 50/scale, true);
+		return pb;
+		};
+	
+	// Setup the toolbar and buttons in it.
+	if(!read_only) {
+		toolbar.set_size_request(-1, 70/display_scale);
+		tool_stop.add(*Gtk::make_managed<Gtk::Image>(
+							  get_icon(install_prefix()+"/share/cadabra2/cdb-icons/cdb-cancel.svg")));
+		tool_run.add(*Gtk::make_managed<Gtk::Image>(
+							 get_icon(install_prefix()+"/share/cadabra2/cdb-icons/cdb-run.svg")));
+		tool_restart.add(*Gtk::make_managed<Gtk::Image>(
+								  get_icon(install_prefix()+"/share/cadabra2/cdb-icons/cdb-restart.svg")));
+		tool_open.add(*Gtk::make_managed<Gtk::Image>(
+							  get_icon(install_prefix()+"/share/cadabra2/cdb-icons/cdb-open.svg")));
+		tool_save.add(*Gtk::make_managed<Gtk::Image>(
+							  get_icon(install_prefix()+"/share/cadabra2/cdb-icons/cdb-save.svg")));
+		tool_save_as.add(*Gtk::make_managed<Gtk::Image>(
+								  get_icon(install_prefix()+"/share/cadabra2/cdb-icons/cdb-save-as.svg")));
+		tool_stop.set_size_request(70/display_scale, 70/display_scale);
+		tool_run.set_size_request(70/display_scale, 70/display_scale);
+		tool_restart.set_size_request(70/display_scale, 70/display_scale);
+		tool_open.set_size_request(70/display_scale, 70/display_scale);
+		tool_save.set_size_request(70/display_scale, 70/display_scale);
+		tool_save_as.set_size_request(70/display_scale, 70/display_scale);
+		tool_run.set_tooltip_text("Execute all cells");
+		tool_stop.set_tooltip_text("Stop execution");
+		tool_restart.set_tooltip_text("Restart kernel");
+		tool_open.set_tooltip_text("Open notebook...");
+		tool_save.set_tooltip_text("Save notebook");
+		tool_save_as.set_tooltip_text("Save notebook as...");
+	
+		topbox.pack_start(toolbar, Gtk::PACK_SHRINK);
+		toolbar.pack_start(tool_open, Gtk::PACK_SHRINK);
+		toolbar.pack_start(tool_save, Gtk::PACK_SHRINK);
+		toolbar.pack_start(tool_save_as, Gtk::PACK_SHRINK);
+		toolbar.pack_start(tool_run, Gtk::PACK_SHRINK);
+		toolbar.pack_start(tool_stop, Gtk::PACK_SHRINK);
+		toolbar.pack_start(tool_restart, Gtk::PACK_SHRINK);
+		toolbar.pack_start(top_label);
+		toolbar.pack_end(kernel_spinner, Gtk::PACK_SHRINK);
+		kernel_spinner.set_size_request(50/display_scale, 50/display_scale);
+		kernel_spinner.set_margin_end(10/display_scale);
+		}
+	
+	// Normally we would use 'set_action_name' to associate the
+	// buttons to actions already defined, but gtkmm-3.24 has
+	// a TODO item "derive from and implement Actionable". So
+	// we re-do what we did for actions.
+	tool_open.signal_clicked().connect(sigc::mem_fun(*this, &NotebookWindow::on_file_open));
+	tool_save.signal_clicked().connect(sigc::mem_fun(*this, &NotebookWindow::on_file_save));
+	tool_save_as.signal_clicked().connect(sigc::mem_fun(*this, &NotebookWindow::on_file_save_as));
+	tool_run.signal_clicked().connect(sigc::mem_fun(*this, &NotebookWindow::on_run_runall));
+	tool_stop.signal_clicked().connect(sigc::mem_fun(*this, &NotebookWindow::on_run_stop));
+	tool_restart.signal_clicked().connect(sigc::mem_fun(*this, &NotebookWindow::on_kernel_restart));
+	
+//	
+//	Gtk::Widget *toolbar=0;
+//	uimanager->get_widget("/ToolBar", toolbar);
+//	topbox.pack_start(*toolbar, Gtk::PACK_SHRINK);
 	topbox.pack_start(supermainbox, true, true);
 	topbox.pack_start(statusbarbox, false, false);
 	supermainbox.pack_start(dragbox, true, true);
 	dragbox.add1(mainbox);
 	mainbox.pack_start(searchbar, false, false);
+	mainbox.set_name("mainbox");
 	searchbar.add(search_hbox);
 //	searchbar.set_halign(Gtk::ALIGN_START);
 	search_hbox.pack_start(searchentry, Gtk::PACK_EXPAND_WIDGET, 10);
 	searchentry.set_size_request(200, -1);
 	search_hbox.pack_start(search_case_insensitive, Gtk::PACK_SHRINK, 10);
-//	search_hbox.pack_start(search_result, Gtk::PACK_EXPAND_WIDGET, 10);
 	search_case_insensitive.set_active(true);
 
 	// Status bar
-	status_label.set_alignment( 0.0, 0.5 );
-	kernel_label.set_alignment( 0.0, 0.5 );
-	status_label.set_size_request(200,-1);
-	status_label.set_justify(Gtk::JUSTIFY_LEFT);
-	kernel_label.set_justify(Gtk::JUSTIFY_LEFT);
 	kernel_label.set_text("Server: not connected");
-	statusbarbox.pack_start(status_label);
-	statusbarbox.pack_start(kernel_label);
-	statusbarbox.pack_start(kernel_spinner);
-//	auto context = kernel_spinner.get_style_context();
-//	context->add_class("spinner");
-	statusbarbox.pack_start(progressbar);
-	statusbarbox.set_name("statusbar");
-	progressbar.set_size_request(200,-1);
+	statusbarbox.set_size_request(-1,50/display_scale);
+	statusbarbox.set_homogeneous(false);
+	statusbarbox.pack_start(status_label, false, false, 0);
+	statusbarbox.pack_start(kernel_label, false, false, 0);
+	statusbarbox.pack_start(progressbar, true, true, 0);
+	status_label.set_size_request(300,-1);
+	kernel_label.set_size_request(300,-1);
+	// status_label.set_halign(Gtk::Align::ALIGN_START);
+	// kernel_label.set_halign(Gtk::Align::ALIGN_START);
+	status_label.set_xalign(0);
+	kernel_label.set_xalign(0);
 	progressbar.set_text("Idle");
 	progressbar.set_show_text(true);
+
+   //	auto context = kernel_spinner.get_style_context();
+   //	context->add_class("spinner");
+	statusbarbox.set_name("statusbar");
 
 	searchentry.signal_search_changed().connect(sigc::mem_fun(*this, &NotebookWindow::on_search_text_changed));
 
@@ -449,7 +722,12 @@ NotebookWindow::NotebookWindow(Cadabra *c, bool ro)
 
 
 	// Window size and title, and ready to go.
-	set_default_size(screen->get_width()/2, screen->get_height()*0.8);
+	if(!ro) {
+		set_default_size(screen->get_width()/2, screen->get_height()*0.8);
+		}
+	else {
+		set_default_size(screen->get_width()/3, screen->get_height()*0.6);
+		}
 	// FIXME: the subtraction for the margin and scrollbar made below
 	// is estimated but should be computed.
 	//	engine.set_geometry(screen->get_width()/2 - 2*30);
@@ -459,7 +737,7 @@ NotebookWindow::NotebookWindow(Cadabra *c, bool ro)
 	if(read_only) {
 		statusbarbox.hide();
 		progressbar.hide();
-		toolbar->hide();
+//		toolbar->hide();
 		}
 	else {
 		// Buttons
@@ -475,16 +753,21 @@ NotebookWindow::~NotebookWindow()
 
 void NotebookWindow::load_css()
 	{
+	// std::cerr << "(re)loading css" << std::endl;
 	std::string text_colour = prefs.highlight ? "black" : "blue";
 	Glib::ustring data = "";
-	data += "textview text { color: "+text_colour+"; background-color: white; -GtkWidget-cursor-aspect-ratio: 0.2; }\n";
-	data += "GtkTextView { color: "+text_colour+"; background-color: white; -GtkWidget-cursor-aspect-ratio: 0.2; }\n";
+	data += "scrolledwindow { background-color: @theme_base_color; }\n";
+	data += "textview text { color: "+text_colour+"; background-color: @theme_base_color; -GtkWidget-cursor-aspect-ratio: 0.2; }\n";
 	data += "textview *:focus { background-color: #eee; }\n";
 	data += ".view text selection { color: #fff; background-color: #888; }\n";
 	data += "textview.error { background: transparent; -GtkWidget-cursor-aspect-ratio: 0.2; color: @theme_fg_color; }\n";
 	data += "#ImageView { transition-property: padding, background-color; transition-duration: 1s; }\n";
-	data += "#CodeInput { font-family: monospace; }\n";
+	data += "#CodeInput { font-family: monospace; font-size: "+std::to_string((100.0+(prefs.font_step*10.0)))+"%; }\n";
 	data += "#Console   { padding: 2px; }\n";
+	data += "#mainbox * { transition-property: opacity; transition-duration: 0.5s; }\n";
+	data += "#mainbox:disabled * { opacity: 0.85; }\n";
+	data += "label { margin-left: 4px; }\n";
+	data += "#TeXArea:selected { background-color: #eee; }\n";
 	data += "spinner { background: none; opacity: 1; -gtk-icon-source: -gtk-icontheme(\"process-working-symbolic\"); }\n";
 	data += "spinner:checked { opacity: 1; animation: spin 1s linear infinite; }\n";
 
@@ -548,8 +831,10 @@ bool NotebookWindow::on_delete_event(GdkEventAny* event)
 		return true;
 	}
 
-void NotebookWindow::on_prefs_set_cv(Console::Position pos)
+void NotebookWindow::on_prefs_set_cv(int npos)
 	{
+	action_console->set_state(Glib::Variant<int>::create(npos));
+	Console::Position pos=static_cast<Console::Position>(npos);
 	// Unparent from whatever we're currently a child of
 	console.hide();
 	if (console.get_parent() == &dragbox) {
@@ -580,8 +865,10 @@ void NotebookWindow::on_prefs_set_cv(Console::Position pos)
 		console_win.set_default_size(900, 300);
 		console_win.set_title("Interactive Console");
 		console_win.get_content_area()->add(console);
-		console_win.signal_response().connect([this](int) {
-			actiongroup->get_action("ConsoleHide")->activate();
+		// Reflect hidden state in menu when the floating
+		// console is closed.
+		console_win.signal_response().connect( [this](int) {
+			this->on_prefs_set_cv(0);
 			});
 		console_win.show_all();
 		}
@@ -665,10 +952,10 @@ void NotebookWindow::set_statusbar_message(const std::string& message, int line,
 
 void NotebookWindow::set_stop_sensitive(bool s)
 	{
-	Gtk::Widget *stop = uimanager->get_widget("/ToolBar/EvaluateStop");
-	stop->set_sensitive(s);
-	stop = uimanager->get_widget("/MenuBar/MenuEvaluate/EvaluateStop");
-	stop->set_sensitive(s);
+	// Disable menu items and toolbar items by simply disabling
+	// the action.
+	
+	action_stop->set_enabled(s);
 	}
 
 void NotebookWindow::process_data()
@@ -717,50 +1004,55 @@ void NotebookWindow::on_kernel_runstatus(bool running)
 
 void NotebookWindow::tex_run_async()
 	{
-	if(tex_error_string!="")
-		return;
-
-	// Run TeX on a separate thread; it'll take a while and
-	// we don't want to block the UI thread.
-	// FIXME: join properly when exiting the program, otherwise
-	// we get a 'terminate called without active exception' message.
-	auto tex_code = [this]() {
-							 try {
-								 for(;;) {
-									 {  std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
-										 engine.invalidate_all();
-										 engine.set_geometry(tex_need_width-2*30);
-										 }
-
-									 engine.convert_all();
-									 dispatch_refresh.emit();
-
-									 {  std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
-										 if(tex_need_width-2*30 == engine.get_geometry()) {
-											 tex_running=false;
-											 break;
-											 }
-										 }
-									 }
-								 }
-							 catch(TeXEngine::TeXException& ex) {
-								 // Display the error in the main thread.
-								 std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
-								 tex_error_string=ex.what();
-								 tex_running=false;
-								 dispatch_refresh.emit();
-								 dispatch_tex_error.emit();
-								 }
-						 };
-
-	std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
-	tex_running=true;
-
-	// Join any thread which may still exist.
-	if(tex_thread)
-		tex_thread->join();
-
-	tex_thread = std::make_unique<std::thread>( tex_code );
+	if(prefs.microtex==false) {
+		if(tex_error_string!="")
+			return;
+		
+		// Run TeX on a separate thread; it'll take a while and
+		// we don't want to block the UI thread.
+		// FIXME: join properly when exiting the program, otherwise
+		// we get a 'terminate called without active exception' message.
+		auto tex_code = [this]() {
+			try {
+				for(;;) {
+					{  std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
+						engine.invalidate_all();
+						engine.set_geometry(tex_need_width-2*30);
+						}
+					
+					engine.convert_all();
+					dispatch_refresh.emit();
+					
+					{  std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
+						if(tex_need_width-2*30 == engine.get_geometry()) {
+							tex_running=false;
+							break;
+							}
+						}
+					}
+				}
+			catch(TeXEngine::TeXException& ex) {
+				// Display the error in the main thread.
+				std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
+				tex_error_string=ex.what();
+				tex_running=false;
+				dispatch_refresh.emit();
+				dispatch_tex_error.emit();
+				}
+			};
+		
+		std::lock_guard<std::recursive_mutex> guard(tex_need_width_mutex);
+		tex_running=true;
+		
+		// Join any thread which may still exist.
+		if(tex_thread)
+			tex_thread->join();
+		
+		tex_thread = std::make_unique<std::thread>( tex_code );
+		}
+	else {
+		dispatch_refresh.emit();
+		}
 	}
 
 void NotebookWindow::process_todo_queue()
@@ -775,6 +1067,8 @@ void NotebookWindow::process_todo_queue()
 		{
 		std::lock_guard<std::mutex> guard(status_mutex);
 		kernel_label.set_text("Server: " + kernel_string);
+		if(compute)
+			mainbox.set_sensitive(compute->kernel_is_connected());
 
 		if(kernel_spinner_status) {
 			kernel_spinner.show();
@@ -918,7 +1212,7 @@ void NotebookWindow::add_cell(const DTree& tr, DTree::iterator it, bool visible)
 			case DataCell::CellType::latex_view: {
 				// FIXME: would be good to share the input and output of TeXView too.
 				// Right now nothing is shared...
-				newcell.outbox = manage( new TeXView(engine, it) );
+				newcell.outbox = manage( new TeXView(engine, it, prefs.microtex) );
 				// std::cerr << "Add widget " << newcell.outbox << " for cell " << it->id().id << std::endl;
 				newcell.outbox->tex_error.connect(
 				   sigc::bind( sigc::mem_fun(this, &NotebookWindow::on_tex_error), it ) );
@@ -971,9 +1265,18 @@ void NotebookWindow::add_cell(const DTree& tr, DTree::iterator it, bool visible)
 				}
 			case DataCell::CellType::image_png: {
 				// FIXME: horribly memory inefficient
-				ImageView *iv=new ImageView();
+				ImageView *iv=new ImageView(scale/display_scale);
 
 				iv->set_image_from_base64(it->textbuf);
+				newcell.imagebox = manage( iv );
+				w=newcell.imagebox;
+				break;
+				}
+			case DataCell::CellType::image_svg: {
+				// FIXME: horribly memory inefficient
+				ImageView *iv=new ImageView(scale/display_scale);
+
+				iv->set_image_from_svg(it->textbuf);
 				newcell.imagebox = manage( iv );
 				w=newcell.imagebox;
 				break;
@@ -1076,16 +1379,12 @@ void NotebookWindow::update_status()
 	progressbar.set_text(progress_string);
 	progressbar.set_fraction(progress_frac);
 
-	if (status_line < 0 || status_col < 0) {
-		status_label.set_text(status_string);
-		}
-	else {
-		std::string pos = " Line: " + std::to_string(status_line) + "   Col: " + std::to_string(status_col);
-		if (status_string == "")
-			status_label.set_text(pos);
-		else
-			status_label.set_text(pos + "   |   " + status_string);
-		}
+	std::string pos = " Line: " + std::to_string(status_line)
+		+ "   Col: " + std::to_string(status_col);
+	if (status_string == "")
+		status_label.set_text(pos);
+	else
+		status_label.set_text(pos + "   |   " + status_string);
 	}
 
 void NotebookWindow::remove_cell(const DTree& doc, DTree::iterator it)
@@ -1188,6 +1487,20 @@ void NotebookWindow::update_cell(const DTree&, DTree::iterator it)
 			vc.inbox->update_buffer();
 			vc.inbox->queue_draw();
 			}
+		else if(it->cell_type==DataCell::CellType::latex_view || it->cell_type==DataCell::CellType::verbatim
+				  || it->cell_type==DataCell::CellType::output) {
+			vc.outbox->image.set_latex(it->textbuf);
+			vc.outbox->image.layout_latex();
+			vc.outbox->queue_draw();
+			}
+		else if(it->cell_type==DataCell::CellType::image_png) {
+			vc.imagebox->set_image_from_base64(it->textbuf);
+			vc.imagebox->queue_draw();
+			}
+		else if(it->cell_type==DataCell::CellType::image_svg) {
+			vc.imagebox->set_image_from_svg(it->textbuf);
+			vc.imagebox->queue_draw();			
+			}
 		}
 
 	disable_stacks=false;
@@ -1281,6 +1594,8 @@ void NotebookWindow::scroll_cell_into_view(DTree::iterator cell)
 			  cell->cell_type==DataCell::CellType::verbatim)
 		al=focusbox.outbox->get_allocation();
 	else if(cell->cell_type==DataCell::CellType::image_png)
+		al=focusbox.imagebox->get_allocation();
+	else if(cell->cell_type==DataCell::CellType::image_svg)
 		al=focusbox.imagebox->get_allocation();
 	else
 		return;
@@ -1603,17 +1918,30 @@ void NotebookWindow::set_name(const std::string& n)
 
 void NotebookWindow::load_file(const std::string& notebook_contents)
 	{
+	mainbox.set_sensitive(false);
+
 	load_from_string(notebook_contents);
 
 	mainbox.show_all();
 	modified=false;
 	update_title();
+
+	Glib::signal_idle().connect( sigc::mem_fun(*this, &NotebookWindow::on_first_redraw) );
+	}
+
+bool NotebookWindow::on_first_redraw()
+	{
+	mainbox.set_sensitive(true);
+	return false;
 	}
 
 void NotebookWindow::on_file_save()
 	{
 	// check if name known, otherwise call save_as
 	if(name.size()>0) {
+		size_t dotpos = name.rfind(".");
+		if(dotpos==std::string::npos)
+			name += ".cnb";
 		std::string res=save(name);
 		if(res.size()>0) {
 			Gtk::MessageDialog md("Error saving notebook "+name);
@@ -1646,6 +1974,9 @@ void NotebookWindow::on_file_save_as()
 	case(Gtk::RESPONSE_OK): {
 			std::string old_name = name;
 			name = dialog.get_filename();
+			size_t dotpos = name.rfind(".");
+			if(dotpos==std::string::npos)
+				name += ".cnb";
 			std::string res=save(name);
 			if(res.size()>0) {
 				Gtk::MessageDialog md("Error saving notebook "+name);
@@ -1680,7 +2011,7 @@ void NotebookWindow::on_file_save_as_jupyter()
 		case(Gtk::RESPONSE_OK): {
 			std::string ipynb_name = dialog.get_filename();
 			std::string out = JSON_serialise(doc);
-			auto json=nlohmann::json::parse(out);
+			nlohmann::json json=nlohmann::json::parse(out);
 			auto ipynb = cnb2ipynb(json);
 			std::ofstream file(ipynb_name);
 			file << ipynb.dump(3) << std::endl;
@@ -1859,19 +2190,57 @@ void NotebookWindow::on_edit_undo()
 	undo();
 	}
 
-void NotebookWindow::on_edit_copy()
+void NotebookWindow::on_edit_copy(const Glib::VariantBase&)
 	{
 	if(selected_cell!=doc.end()) {
 		Glib::RefPtr<Gtk::Clipboard> clipboard = Gtk::Clipboard::get(GDK_SELECTION_CLIPBOARD);
 		on_outbox_copy(clipboard, selected_cell);
 		}
 	if(current_cell!=doc.end()) {
+//		std::cerr << "copy called for non-outbox cell" << std::endl;
 		// FIXME: handle other cell types.
 		}
 	}
 
 void NotebookWindow::on_edit_paste()
 	{
+	if(current_cell!=doc.end()) {
+		// std::cerr << "paste: " << std::endl;
+      Glib::RefPtr<Gtk::Clipboard> clipboard = Gtk::Clipboard::get(GDK_SELECTION_CLIPBOARD);
+      clipboard->request_targets( [clipboard, this](const std::vector<Glib::ustring>& targets) {
+			// Figure out which formats we can request.
+			bool have_cadabra=false, have_utf8_string=false, have_text=false;
+			for(const auto& t: targets) {
+				// std::cerr << t << std::endl;
+				if(t=="cadabra")
+					have_cadabra=true;
+				else if(t=="UTF8_STRING")
+					have_utf8_string=true;
+				else if(t=="TEXT")
+					have_text=true;
+				}
+			// Now insert.
+			std::string target;
+			if(have_cadabra)   target="cadabra";
+			else if(have_utf8_string) target="UTF8_STRING";
+			else if(have_text)        target="TEXT";
+			else return;
+
+			// std::cerr << "requesting target " << target << std::endl;
+			clipboard->request_contents(target, [this](const Gtk::SelectionData& data) {
+				std::string content = data.get_data_as_string();
+				auto vis = canvasses[current_canvas]->visualcells.find(&(*current_cell));
+				if(vis!=canvasses[current_canvas]->visualcells.end()) {
+					// std::cerr << "inserting " << content << std::endl;
+					CodeInput *inbox = (*vis).second.inbox;
+					inbox->edit.get_buffer()->insert_at_cursor(content);
+					}
+//				else {
+//					std::cerr << "cannot find cell to insert into" << std::endl;
+//					}
+				});
+			});
+		}
 	}
 
 void NotebookWindow::on_edit_insert_above()
@@ -2143,9 +2512,10 @@ void NotebookWindow::on_help_about()
 	about.set_logo(logo);
 	std::vector<Glib::ustring> special;
 	special.push_back("José M. Martín-García (for the xPerm canonicalisation code)");
-	special.push_back("Dominic Price (for the conversion to pybind and most of the Windows port)");
+	special.push_back("Dominic Price (for many additions, e.g. the conversion to pybind and the meld algorithm)");
 	special.push_back("Connor Behan (for various improvements related to index-free algorithms)");
 	special.push_back("James Allen (for writing much of the factoring code)");
+	special.push_back("NanoMichael (for the MicroTeX rendering library)");
 	special.push_back("Software Sustainability Institute");
 	special.push_back("Institute of Advanced Study (for a Christopherson/Knott fellowship)");
 	about.add_credit_section("Special thanks", special);
@@ -2162,33 +2532,33 @@ void NotebookWindow::on_help_register()
 	txt.set_markup("<span font_size=\"large\" font_weight=\"bold\">Welcome to Cadabra!</span>\n\nWriting this software takes an incredible amount of spare time,\nand it is extremely difficult to get funding for its development.\n\nPlease show your support by registering your email address,\nso I can convince the bean-counters that this software is of interest.\n\nI will only use this address to count users and to email you,\nroughly once every half a year, with a bit of news about Cadabra.\n\nMany thanks for your support!\n\nKasper Peeters, <a href=\"mailto:info@cadabra.science\">info@cadabra.science</a>");
 	txt.set_line_wrap();
 	txt.set_margin_top(10);
-	txt.set_margin_left(10);
-	txt.set_margin_right(10);
+	txt.set_margin_start(10);
+	txt.set_margin_end(10);
 	txt.set_margin_bottom(10);
 	box->pack_start(txt, Gtk::PACK_EXPAND_WIDGET);
 
 	Gtk::Grid grid;
 	grid.set_column_homogeneous(false);
 	grid.set_hexpand(true);
-	grid.set_margin_left(10);
-	grid.set_margin_right(10);
+	grid.set_margin_start(10);
+	grid.set_margin_end(10);
 	box->pack_start(grid, Gtk::PACK_EXPAND_WIDGET);
 
 	Gtk::Label name_label("Name:");
 	Gtk::Entry name;
-	name_label.set_alignment(0, 0.5);
+//	name_label.set_alignment(0, 0.5);
 	name.set_hexpand(true);
 	grid.attach(name_label, 0, 0, 1, 1);
 	grid.attach(name, 1, 0, 1, 1);
 	Gtk::Label email_label("Email address:");
-	email_label.set_alignment(0, 0.5);
+//	email_label.set_alignment(0, 0.5);
 	Gtk::Entry email;
 	email.set_hexpand(true);
 	grid.attach(email_label, 0, 1, 1, 1);
 	grid.attach(email, 1, 1, 1, 1);
 	Gtk::Label affiliation_label("Affiliation:");
 	Gtk::Entry affiliation;
-	affiliation_label.set_alignment(0, 0.5);
+//	affiliation_label.set_alignment(0, 0.5);
 	affiliation.set_hexpand(true);
 	grid.attach(affiliation_label, 0, 2, 1, 1);
 	grid.attach(affiliation, 1, 2, 1, 1);
@@ -2217,7 +2587,7 @@ void NotebookWindow::on_help_register()
 		});
 	box->show_all();
 	md.run();
-	menu_help_register->set_sensitive(!prefs.is_registered);
+	action_register->set_enabled(!prefs.is_registered);
 	}
 
 void NotebookWindow::on_text_scaling_factor_changed(const std::string& key)
@@ -2443,17 +2813,11 @@ void NotebookWindow::on_prefs_font_size(int num)
 	if(prefs.font_step==num) return;
 
 	prefs.font_step=num;
-
-	//	std::string res=save_config();
-	//	if(res.size()>0) {
-	//		 Gtk::MessageDialog md("Error");
-	//		 md.set_secondary_text(res);
-	//		 md.set_type_hint(Gdk::WINDOW_TYPE_HINT_DIALOG);
-	//		 md.run();
-	//		 }
-
-	// std::cerr << "cadabra-client: prefs_font_size = " << num << std::endl;
+	action_fontsize->set_state(Glib::Variant<int>::create(num));
+	prefs.save();
+	
 	engine.set_font_size(12+(num*2));
+	load_css();
 
 	if(is_configured) {
 		// std::cerr << "cadabra-client: re-running TeX to change font size" << std::endl;
@@ -2463,27 +2827,18 @@ void NotebookWindow::on_prefs_font_size(int num)
 		engine.invalidate_all();
 		tex_run_async();
 
-		for(auto& canvas: canvasses) {
-			for(auto& visualcell: canvas->visualcells) {
-				if(visualcell.first->cell_type==DataCell::CellType::python ||
-				      visualcell.first->cell_type==DataCell::CellType::latex) {
-					visualcell.second.inbox->set_font_size(num);
-					}
-				}
-			}
+		//for(auto& canvas: canvasses) {
+		//	for(auto& visualcell: canvas->visualcells) {
+		//		if(visualcell.first->cell_type==DataCell::CellType::python ||
+		//		      visualcell.first->cell_type==DataCell::CellType::latex) {
+		//			visualcell.second.inbox->set_font_size(num);
+		//			}
+		//		}
+		//	}
 
 		for(unsigned int i=0; i<canvasses.size(); ++i)
 			canvasses[i]->refresh_all();
 		}
-
-
-	//	// Hack.
-	//	auto screen = Gdk::Screen::get_default();
-	//	if(get_window()!=0) {
-	//		std::cerr << "invalidating" << std::endl;
-	//		get_window()->invalidate_rect(Gdk::Rectangle(0, 0, screen->get_width()/2, screen->get_height()*0.8),true);
-	//		queue_draw();
-	//		}
 	}
 
 void NotebookWindow::on_prefs_highlight_syntax(bool on)
@@ -2491,7 +2846,8 @@ void NotebookWindow::on_prefs_highlight_syntax(bool on)
 	if (prefs.highlight == on) return;
 	prefs.highlight = on;
 	prefs.save();
-
+	action_highlight->set_state(Glib::Variant<int>::create(on));
+	
 	for (auto& canvas : canvasses) {
 		for (auto& visualcell : canvas->visualcells) {
 			// Need to be careful to only try and do this on latex or
@@ -2502,11 +2858,11 @@ void NotebookWindow::on_prefs_highlight_syntax(bool on)
 				case DataCell::CellType::python:
 				case DataCell::CellType::latex:
 					if(on) {
-					load_css();
+						load_css();
 						visualcell.second.inbox->enable_highlighting(visualcell.first->cell_type, prefs);
 						}
 					else {
-					load_css();
+						load_css();
 						visualcell.second.inbox->disable_highlighting();
 						}
 					break;
@@ -2515,6 +2871,38 @@ void NotebookWindow::on_prefs_highlight_syntax(bool on)
 				}
 			}
 		}
+	}
+
+void NotebookWindow::on_prefs_microtex(bool on)
+	{
+	if (prefs.microtex == on) return;
+	prefs.microtex = on;
+	prefs.save();
+	action_microtex->set_state(Glib::Variant<int>::create(on));
+
+	Gtk::MessageDialog md("Restart Cadabra to make the rendering setting take effect",
+								 false, Gtk::MESSAGE_WARNING, Gtk::BUTTONS_OK, true);
+	md.set_resizable(false);
+	md.set_transient_for(*this);
+	md.set_type_hint(Gdk::WINDOW_TYPE_HINT_DIALOG);
+	md.run();
+	
+// 	for (auto& canvas : canvasses) {
+// 		for (auto& visualcell : canvas->visualcells) {
+// 			// Need to be careful to only try and do this on latex or
+// 			// python cells to avoid an exception being raised when
+// 			// trying to edit an immutable cell type
+// 			switch (visualcell.first->cell_type) {
+// 				// Fallthrough
+// 				case DataCell::CellType::python:
+// 				case DataCell::CellType::latex:
+// 					visualcell.second.outbox->set_use_microtex(prefs.microtex);
+// 					break;
+// 				default:
+// 					break;
+// 				}
+// 			}
+// 		}
 	}
 
 void NotebookWindow::on_prefs_choose_colours()
@@ -2535,7 +2923,7 @@ void NotebookWindow::on_prefs_use_defaults()
 		for (auto& action : default_actions)
 			action->activate();
 		refresh_highlighting();
-		menu_help_register->set_sensitive(!prefs.is_registered);
+		action_register->set_enabled(!prefs.is_registered);
 		prefs.save();
 		}
 	}
@@ -2672,34 +3060,36 @@ void NotebookWindow::unselect_output_cell()
 	for(unsigned int i=0; i<canvasses.size(); ++i) {
 		if(canvasses[i]->visualcells.find(&(*selected_cell))!=canvasses[i]->visualcells.end()) {
 			auto& outbox = canvasses[i]->visualcells[&(*selected_cell)].outbox;
-			outbox->image.set_state(Gtk::STATE_NORMAL);
+			outbox->image.set_state_flags(Gtk::STATE_FLAG_NORMAL);
+			outbox->queue_draw();
 			}
 		}
 	selected_cell=doc.end();
-	action_copy->set_sensitive(false);
+	action_copy->set_enabled(false);
 	}
 
 bool NotebookWindow::handle_outbox_select(GdkEventButton *, DTree::iterator it)
 	{
-//	std::cerr << "handle_outbox_select " << it->textbuf << std::endl;
+	// std::cerr << "handle_outbox_select " << it->textbuf << std::endl;
 	unselect_output_cell();
 
 	// Colour the background of the selected cell, in all canvasses.
 	for(int i=0; i<(int)canvasses.size(); ++i) {
 		if(canvasses[i]->visualcells.find(&(*it))!=canvasses[i]->visualcells.end()) {
 			auto& outbox = canvasses[i]->visualcells[&(*it)].outbox;
-			outbox->image.set_state(Gtk::STATE_SELECTED);
-//			std::cerr << "selecting" << std::endl;
-//			if(i==current_canvas)
-//				outbox->grab_focus();
-			// FIXME: need to remove focus from any CodeInput widget; the above does not do that.
+			outbox->image.set_state_flags(Gtk::STATE_FLAG_SELECTED);
+			outbox->queue_draw();
+			if(i==current_canvas) {
+				outbox->grab_focus();
+				}
 			}
 		}
 	selected_cell=it;
-	action_copy->set_sensitive(true);
+	action_copy->set_enabled(true);
 
-	Glib::RefPtr<Gtk::Clipboard> clipboard = Gtk::Clipboard::get(GDK_SELECTION_PRIMARY);
-	on_outbox_copy(clipboard, selected_cell);
+	// We now require that the user ctrl-c's this before copying to the clipboard.
+	// Glib::RefPtr<Gtk::Clipboard> clipboard = Gtk::Clipboard::get(GDK_SELECTION_PRIMARY);
+	// on_outbox_copy(clipboard, selected_cell);
 	return true;
 	}
 
@@ -2709,10 +3099,11 @@ void NotebookWindow::on_outbox_copy(Glib::RefPtr<Gtk::Clipboard> refClipboard, D
 
 	// Find the child cell which contains the input_form data.
 	auto sib=doc.begin(it);
+//	std::cerr << "Finding children of " << it->textbuf << std::endl;
 	while(sib!=doc.end(it)) {
 		if(sib->cell_type==DataCell::CellType::input_form) {
 			clipboard_cdb = sib->textbuf;
-			// std::cerr << "found input form " << clipboard_cdb << std::endl;
+//			std::cerr << "found input form " << clipboard_cdb << std::endl;
 			break;
 			}
 		++sib;
@@ -2721,8 +3112,10 @@ void NotebookWindow::on_outbox_copy(Glib::RefPtr<Gtk::Clipboard> refClipboard, D
 	// Setup clipboard handling
 	clipboard_txt = cpystring;
 	std::vector<Gtk::TargetEntry> listTargets;
-	if(clipboard_cdb.size()>0)
+	if(clipboard_cdb.size()>0) {
+//		std::cerr << "let them know we have cadabra format" << std::endl;
 		listTargets.push_back( Gtk::TargetEntry("cadabra") );
+		}
 	listTargets.push_back( Gtk::TargetEntry("UTF8_STRING") );
 	listTargets.push_back( Gtk::TargetEntry("TEXT") );
 	refClipboard->set( listTargets,
@@ -2734,8 +3127,10 @@ void NotebookWindow::on_clipboard_get(Gtk::SelectionData& selection_data, guint 
 	{
 	const Glib::ustring target = selection_data.get_target();
 
-	if(target == "cadabra")
+	if(target == "cadabra") {
+//		std::cerr << "received request for target cadabra: " << clipboard_cdb << std::endl;
 		selection_data.set("cadabra", clipboard_cdb);
+		}
 	else if(target == "UTF8_STRING" || target=="TEXT") {
 		selection_data.set_text(clipboard_txt);
 		}

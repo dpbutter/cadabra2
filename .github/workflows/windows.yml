@@ -1,0 +1,70 @@
+# Create Windows installer on a github release event.  This assumes
+# that the cadabra version is the same as the release name, and it
+# will attempt to add the installer file to the release assets.
+
+name: Windows 11
+
+on:
+  release:
+    types: [created]
+
+defaults:
+    run:
+      shell: msys2 {0}
+
+jobs:
+  msys2-ucrt64:
+    runs-on: windows-latest
+    name: Windows 11
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          curl
+          git
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-python
+          mingw-w64-ucrt-x86_64-gtkmm3
+          mingw-w64-ucrt-x86_64-boost    
+          mingw-w64-ucrt-x86_64-sqlite3
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-python-matplotlib
+          mingw-w64-ucrt-x86_64-python-sympy
+          mingw-w64-ucrt-x86_64-github-cli
+          
+    - name: Authenticate GitHub CLI
+      run: gh auth setup-git
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+    - uses: actions/checkout@master
+      name: Checkout source
+      
+    - name: Build
+      run: |
+        mkdir build
+        cd build
+        # Turn off searching Python in the registry, as that contains the
+        # windows Python which is not the MSYS python that we want to use.
+        cmake -DPython_FIND_REGISTRY=NEVER ..
+        ninja
+        ninja install
+        cpack
+
+    - name: Set version variables from output of cmake
+      run: |
+        VER=$(cat build/VERSION)
+        echo "VERSION=$VER" >> $GITHUB_ENV
+
+    - name: Upload release assets
+      run: |
+        gh release upload "${{ env.VERSION }}" build/cadabra2-${{ env.VERSION }}-win64.exe --clobber
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

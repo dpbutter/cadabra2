@@ -65,6 +65,9 @@ namespace yngtab {
 
 	class tableau : public tableau_base {
 		public:
+			tableau();
+			tableau(const tableau&);
+			
 			virtual ~tableau();
 			virtual unsigned int number_of_rows() const;
 			virtual unsigned int row_size(unsigned int row) const;
@@ -85,6 +88,9 @@ namespace yngtab {
 		public:
 			typedef T value_type;
 
+			filled_tableau();
+			filled_tableau(const filled_tableau<T>&);
+			
 			virtual ~filled_tableau();
 			virtual unsigned int number_of_rows() const;
 			virtual unsigned int row_size(unsigned int row) const;
@@ -153,8 +159,8 @@ namespace yngtab {
 					in_column_iterator  operator++(int);
 					in_column_iterator& operator--();
 					in_column_iterator  operator--(int);
-					in_column_iterator  operator+(unsigned int);
-					in_column_iterator  operator-(unsigned int);
+					in_column_iterator  operator+(unsigned int) const;
+					in_column_iterator  operator-(unsigned int) const;
 					in_column_iterator& operator+=(unsigned int);
 					in_column_iterator& operator-=(unsigned int);
 					T&                  operator[](int n) const;
@@ -184,8 +190,8 @@ namespace yngtab {
 				in_column_const_iterator  operator++(int);
 				in_column_const_iterator& operator--();
 				in_column_const_iterator  operator--(int);
-				in_column_const_iterator  operator+(unsigned int);
-				in_column_const_iterator  operator-(unsigned int);
+				in_column_const_iterator  operator+(unsigned int) const;
+				in_column_const_iterator  operator-(unsigned int) const;
 				in_column_const_iterator& operator+=(unsigned int);
 				in_column_const_iterator& operator-=(unsigned int);
 				bool                operator<(const in_column_const_iterator& other) const;
@@ -212,8 +218,8 @@ namespace yngtab {
 				in_row_iterator  operator++(int);
 				in_row_iterator& operator--();
 				in_row_iterator  operator--(int);
-				in_row_iterator  operator+(unsigned int);
-				in_row_iterator  operator-(unsigned int);
+				in_row_iterator  operator+(unsigned int) const;
+				in_row_iterator  operator-(unsigned int) const;
 				in_row_iterator& operator+=(unsigned int);
 				in_row_iterator& operator-=(unsigned int);
 				bool                operator<(const in_row_iterator& other) const;
@@ -241,8 +247,8 @@ namespace yngtab {
 				in_row_const_iterator  operator++(int);
 				in_row_const_iterator& operator--();
 				in_row_const_iterator  operator--(int);
-				in_row_const_iterator  operator+(unsigned int);
-				in_row_const_iterator  operator-(unsigned int);
+				in_row_const_iterator  operator+(unsigned int) const;
+				in_row_const_iterator  operator-(unsigned int) const;
 				in_row_const_iterator& operator+=(unsigned int);
 				in_row_const_iterator& operator-=(unsigned int);
 				bool                operator<(const in_row_const_iterator& other) const;
@@ -269,8 +275,8 @@ namespace yngtab {
 					iterator            operator++(int);
 					iterator&           operator--();
 					iterator            operator--(int);
-					iterator            operator+(unsigned int);
-					iterator            operator-(unsigned int);
+					iterator            operator+(unsigned int) const;
+					iterator            operator-(unsigned int) const;
 					iterator&           operator+=(unsigned int);
 					iterator&           operator-=(unsigned int);
 					bool                operator<(const iterator& other) const;
@@ -296,8 +302,8 @@ namespace yngtab {
 				const_iterator            operator++(int);
 				const_iterator&				operator--();
 				const_iterator            operator--(int);
-				const_iterator            operator+(unsigned int);
-				const_iterator            operator-(unsigned int);
+				const_iterator            operator+(unsigned int) const;
+				const_iterator            operator-(unsigned int) const;
 				const_iterator&				 operator+=(unsigned int);
 				const_iterator&				operator-=(unsigned int);
 				bool			               operator<(const const_iterator& other) const;
@@ -532,7 +538,7 @@ namespace yngtab {
 		}
 
 	template<class T>
-	typename filled_tableau<T>::in_column_iterator filled_tableau<T>::in_column_iterator::operator+(unsigned int n)
+	typename filled_tableau<T>::in_column_iterator filled_tableau<T>::in_column_iterator::operator+(unsigned int n) const
 		{
 		typename filled_tableau<T>::in_column_iterator it2(*this);
 		it2+=n;
@@ -540,7 +546,7 @@ namespace yngtab {
 		}
 
 	template<class T>
-	typename filled_tableau<T>::in_column_iterator filled_tableau<T>::in_column_iterator::operator-(unsigned int n)
+	typename filled_tableau<T>::in_column_iterator filled_tableau<T>::in_column_iterator::operator-(unsigned int n) const
 		{
 		typename filled_tableau<T>::in_column_iterator it2(*this);
 		it2-=n;
@@ -673,7 +679,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::in_column_const_iterator filled_tableau<T>::in_column_const_iterator::operator+(unsigned int n)
+	typename filled_tableau<T>::in_column_const_iterator filled_tableau<T>::in_column_const_iterator::operator+(unsigned int n) const
 	{
 		typename filled_tableau<T>::in_column_const_iterator it2(*this);
 		it2 += n;
@@ -681,7 +687,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::in_column_const_iterator filled_tableau<T>::in_column_const_iterator::operator-(unsigned int n)
+	typename filled_tableau<T>::in_column_const_iterator filled_tableau<T>::in_column_const_iterator::operator-(unsigned int n) const
 	{
 		typename filled_tableau<T>::in_column_const_iterator it2(*this);
 		it2 -= n;
@@ -803,7 +809,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::in_row_iterator filled_tableau<T>::in_row_iterator::operator+(unsigned int n)
+	typename filled_tableau<T>::in_row_iterator filled_tableau<T>::in_row_iterator::operator+(unsigned int n) const
 	{
 		typename filled_tableau<T>::in_row_iterator it2(*this);
 		it2 += n;
@@ -811,7 +817,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::in_row_iterator filled_tableau<T>::in_row_iterator::operator-(unsigned int n)
+	typename filled_tableau<T>::in_row_iterator filled_tableau<T>::in_row_iterator::operator-(unsigned int n) const
 	{
 		typename filled_tableau<T>::in_row_iterator it2(*this);
 		it2 -= n;
@@ -939,7 +945,7 @@ namespace yngtab {
 
 
 	template<class T>
-	typename filled_tableau<T>::in_row_const_iterator filled_tableau<T>::in_row_const_iterator::operator+(unsigned int n)
+	typename filled_tableau<T>::in_row_const_iterator filled_tableau<T>::in_row_const_iterator::operator+(unsigned int n) const
 	{
 		typename filled_tableau<T>::in_row_const_iterator it2(*this);
 		it2 += n;
@@ -947,7 +953,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::in_row_const_iterator filled_tableau<T>::in_row_const_iterator::operator-(unsigned int n)
+	typename filled_tableau<T>::in_row_const_iterator filled_tableau<T>::in_row_const_iterator::operator-(unsigned int n) const
 	{
 		typename filled_tableau<T>::in_row_const_iterator it2(*this);
 		it2 -= n;
@@ -1070,7 +1076,7 @@ namespace yngtab {
 		}
 
 	template<class T>
-	typename filled_tableau<T>::iterator filled_tableau<T>::iterator::operator+(unsigned int n)
+	typename filled_tableau<T>::iterator filled_tableau<T>::iterator::operator+(unsigned int n) const
 		{
 		typename filled_tableau<T>::iterator it2(*this);
 		it2+=n;
@@ -1078,7 +1084,7 @@ namespace yngtab {
 		}
 
 	template<class T>
-	typename filled_tableau<T>::iterator filled_tableau<T>::iterator::operator-(unsigned int n)
+	typename filled_tableau<T>::iterator filled_tableau<T>::iterator::operator-(unsigned int n) const
 		{
 		typename filled_tableau<T>::iterator it2(*this);
 		it2-=n;
@@ -1223,7 +1229,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::const_iterator filled_tableau<T>::const_iterator::operator+(unsigned int n)
+	typename filled_tableau<T>::const_iterator filled_tableau<T>::const_iterator::operator+(unsigned int n) const
 	{
 		typename filled_tableau<T>::const_iterator it2(*this);
 		it2 += n;
@@ -1231,7 +1237,7 @@ namespace yngtab {
 	}
 
 	template<class T>
-	typename filled_tableau<T>::const_iterator filled_tableau<T>::const_iterator::operator-(unsigned int n)
+	typename filled_tableau<T>::const_iterator filled_tableau<T>::const_iterator::operator-(unsigned int n) const
 	{
 		typename filled_tableau<T>::const_iterator it2(*this);
 		it2 -= n;
@@ -1714,6 +1720,18 @@ namespace yngtab {
 			if(sym.value_permute.size()>1)
 				sym.apply_symmetry();
 			}
+		}
+
+	template<class T>
+	filled_tableau<T>::filled_tableau()
+		: tableau()
+		{
+		}
+
+	template<class T>
+	filled_tableau<T>::filled_tableau(const filled_tableau<T>& other)
+		: tableau(other), rows(other.rows)
+		{
 		}
 
 	template<class T>

@@ -1,4 +1,4 @@
-if(WIN32)
+if(WIN33)
 #  windows_find_library(GTKMM3 "gtkmm.dll" "glib;sigc++;pango")
   windows_find_library(GTKMM3_LIBRARIES
 	gtk gdk gdk_pixbuf pangocairo pango atk gio gobject
@@ -11,9 +11,9 @@ if(WIN32)
 else()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(GTKMM3 REQUIRED gtkmm-3.0)
-  include_directories(${GTKMM3_INCLUDE_DIRS})
-  link_directories(${GTKMM3_LIBRARY_DIRS})
-  add_definitions(${GTKMM3_CFLAGS_OTHER})
+  include_directories(${GTKMM3_INCLUDE_DIRS} ${PANGOMM_INCLUDE_DIRS})
+  link_directories(${GTKMM3_LIBRARY_DIRS} ${PANGOMM_LIBRARY_DIRS})
+  add_definitions(${GTKMM3_CFLAGS_OTHER} ${PANGOMM_CFLAGS_OTHER})
 endif()
 
 if (GTKMM3_FOUND)

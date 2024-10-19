@@ -115,6 +115,11 @@ unsigned TeXEngine::TeXRequest::height() const
 	return height_;
 	}
 
+std::string TeXEngine::TeXRequest::latex() const
+	{
+	return latex_string;
+	}
+
 const std::vector<unsigned char>& TeXEngine::TeXRequest::image() const
 	{
 	return image_;
@@ -183,6 +188,7 @@ TeXEngine::~TeXEngine()
 TeXEngine::TeXEngine()
 	: horizontal_pixels_(0), font_size_(12), total_scale_(1.0), device_scale_(1.0)
 	{
+#ifndef _WIN32
 	//	latex_packages.push_back("breqn");
 	latex_packages.push_back("hyperref");
 
@@ -194,6 +200,7 @@ TeXEngine::TeXEngine()
 	std::stringstream buffer;
 	buffer << preamble.rdbuf();
 	preamble_string = buffer.str();
+#endif
 	}
 
 void TeXEngine::set_geometry(int horpix)
@@ -224,7 +231,13 @@ void TeXEngine::set_font_size(int fontsize)
 			++reqit;
 			}
 		}
+	// std::cerr << "FONTSIZE " << fontsize << std::endl;
 	font_size_=fontsize;
+	}
+
+int TeXEngine::get_font_size() const
+	{
+	return font_size_;
 	}
 
 void TeXEngine::set_scale(double total_scale, double device_scale)
@@ -244,6 +257,11 @@ void TeXEngine::set_scale(double total_scale, double device_scale)
 double TeXEngine::get_scale() const
 	{
 	return total_scale_;
+	}
+
+double TeXEngine::get_device_scale() const
+	{
+	return device_scale_;
 	}
 
 TeXEngine::TeXRequest::TeXRequest()
@@ -385,7 +403,7 @@ void TeXEngine::convert_set(std::set<std::shared_ptr<TeXRequest> >& reqs)
 	// Note: the number here has no effect on the size in pixels of the generated
 	// PDF. That is set with the -D parameter of dvipng.
 
-	const double horizontal_mm=horizontal_pixels_*(12.0/font_size_)/3.94/(total_scale_/device_scale_);
+	const double horizontal_mm=horizontal_pixels_*(12.0/font_size_)/4.4/(total_scale_/device_scale_);
 	//#ifdef DEBUG
 	//	std::cerr << "tex_it: font_size " << font_size << std::endl
 	//				 << "        pixels    " << horizontal_pixels_ << std::endl

@@ -1,25 +1,38 @@
 set(CMAKE_LEGACY_CYGWIN_WIN32 0)
-set(CADABRA_CMAKE_VERSION 3.9)
+set(CADABRA_CMAKE_VERSION 3.12)
 
 # Policy settings for CMake to resolve ambiguities.
 
 if(POLICY CMP0042)
   cmake_policy(SET CMP0042 NEW)
+  message(STATUS "Set CMake policy CM0042 to NEW")
 endif()
 if(POLICY CMP0054)
   cmake_policy(SET CMP0054 NEW)
+  message(STATUS "Set CMake policy CM0054 to NEW")
 endif()
 if(POLICY CMP0127)
   cmake_policy(SET CMP0127 NEW)
+  message(STATUS "Set CMake policy CM0127 to NEW")
+endif()
+if(POLICY CMP0148)
+  cmake_policy(SET CMP0148 NEW)
+  message(STATUS "Set CMake policy CM0148 to NEW")
+endif()
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+  message(STATUS "Set CMake policy CM0167 to NEW")
+endif()
+if(POLICY CMP0094)
+  cmake_policy(SET CMP0094 NEW)
+  message(STATUS "Set CMake policy CM0094 to NEW (use first Python found)")
+endif()
+if(POLICY CMP0169)
+  cmake_policy(SET CMP0169 OLD) # CMake 3.30: call FetchContent_Populate() with just the name of a dependency. This modern alternative was introduced in cmake 3.14 but we still support 3.12.
 endif()
 
 cmake_minimum_required(VERSION ${CADABRA_CMAKE_VERSION})
-if (${CMAKE_VERSION} VERSION_LESS "3.8.0")
-	set(CMAKE_CXX_STANDARD 14)
-	message(STATUS "Using C++14 as you are using CMake < 3.8; consider upgrading as future versions of Cadabra may use C++17 features")
-else()
-	set(CMAKE_CXX_STANDARD 17)
-endif()
+set(CMAKE_CXX_STANDARD 17)
 project(Cadabra)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -66,11 +79,23 @@ if (APPLE)
    set(ENV{PKG_CONFIG_PATH} "/usr/local/opt/libffi/lib/pkgconfig:")
 endif()
 
+set(PKG_CONFIG_USE_STATIC_LIBS OFF)
+
 # Get version information.
 include(cmake/version.cmake)
 print_header("Building Cadabra version ${CADABRA_VERSION_MAJOR}.${CADABRA_VERSION_MINOR}.${CADABRA_VERSION_PATCH}.${CADABRA_VERSION_TWEAK} (${SYSTEM_BITS}-bit)")
 message(STATUS "Build id '${CADABRA_VERSION_BUILD}' dated ${CADABRA_VERSION_DATE}")
 message(STATUS "Build mode is set to '${CMAKE_BUILD_TYPE}'")
+message(STATUS "Architecture is '${CMAKE_SYSTEM_PROCESSOR}'")
+
+# Store the version number in a build/VERSION file (so that e.g. github
+# actions can pick it up).
+if(NOT "${CADABRA_VERSION_TWEAK}" STREQUAL "0")
+  file(WRITE build/VERSION       "${CADABRA_VERSION_MAJOR}.${CADABRA_VERSION_MINOR}.${CADABRA_VERSION_PATCH}.${CADABRA_VERSION_TWEAK}")
+else()
+  file(WRITE build/VERSION       "${CADABRA_VERSION_MAJOR}.${CADABRA_VERSION_MINOR}.${CADABRA_VERSION_PATCH}")
+endif()  
+
 
 # Notify about install directory
 if ("${CMAKE_INSTALL_PREFIX}" STREQUAL "")
@@ -78,15 +103,6 @@ if ("${CMAKE_INSTALL_PREFIX}" STREQUAL "")
 else()
 	message(STATUS "Install directory set to ${CMAKE_INSTALL_PREFIX}")
 endif()
-
-# install(
-#   CODE
-#   "
-#   if (EXISTS \"\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/man/man1/cadabra2.1\")
-#      message(FATAL_ERROR \"\nThe location of the Cadabra manual has changed since the last installation. Please remove the old files with 'make deduplicate'.\n\")
-#   endif()
-#   "
-#   )
 
 # Turn Mathematica support on/off.
 option(ENABLE_MATHEMATICA "Enable Mathematica support" OFF)
@@ -115,8 +131,14 @@ include(cmake/packaging.cmake)
 #
 option(MSVC_TARGET_CONSOLE "Force Release book on MSVC to display a console window" OFF)
 
-# Provide option to build with Python 3 (default) or Python 2.
-option(USE_PYTHON_3 "Use Python 3 if ON, or fall back to Python 2 if OFF" ON)
+option(APPIMAGE_MODE "Run in AppImage mode, overriding path settings" OFF)
+if(APPIMAGE_MODE)
+  message(STATUS "Building for AppImage packaging (Debian paths, MicroTeX)")
+  if("${CMAKE_INSTALL_PREFIX}" STREQUAL "/usr")
+  else()
+    MESSAGE(FATAL_ERROR "Building with -DAPPIMAGE_MODE=ON also requires -DCMAKE_INSTALL_PREFIX=/usr")
+  endif()
+endif()
 
 option(PACKAGING_MODE "Run in packaging mode, overriding path settings" OFF)
 if (PACKAGING_MODE)
@@ -175,45 +197,45 @@ endif()
 
 # GCC
 if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
-	if (ENABLE_FRONTEND)
-		if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
-			message(FATAL_ERROR "GCC version must be at least 4.9 for regex support! See http://askubuntu.com/questions/428198/getting-installing-gcc-g-4-9-on-ubuntu and then set the environment variables CXX to g++-4.9 and CC to gcc-4.9. You may have to erase the build directory before re-running cmake.")
-		endif()
-	endif()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -Wall -fvisibility=hidden -Wno-unused-but-set-variable")
+  if (ENABLE_FRONTEND)
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
+      message(FATAL_ERROR "GCC version must be at least 4.9 for regex support! See http://askubuntu.com/questions/428198/getting-installing-gcc-g-4-9-on-ubuntu and then set the environment variables CXX to g++-4.9 and CC to gcc-4.9. You may have to erase the build directory before re-running cmake.")
+    endif()
+  endif()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -Wall -Wextra -Wunused -Wno-template-id-cdtor -Wno-unknown-pragmas -Wno-misleading-indentation -fvisibility=hidden -Wno-unused-but-set-variable -Wno-unused-parameter")
 endif()
 
 # Clang
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-	# For Clang, need to additionally check version to avoid compiler bugs
-	if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.5)
-		message(FATAL_ERROR "Clang version must be at least 3.5 to avoid known bugs.")
-	endif()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -fvisibility=hidden -Wall -Wextra -Wunused")
+  # For Clang, need to additionally check version to avoid compiler bugs
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.5)
+    message(FATAL_ERROR "Clang version must be at least 3.5 to avoid known bugs.")
+  endif()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -fvisibility=hidden -Wall -Wextra -Wunused -Wno-unused-parameter -Wno-null-pointer-subtraction")
 endif()
 
 # Visual Studio
 if(MSVC)
-	set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-	# Disable specific warnings
-	set(MSVC_FLAGS
-		"/wd4250"						# inherits via dominance (rampant in the GTKMM codebase)
-		"/wd4101"						# unreferenced local variable
-		"/wd4244"						# conversion from x to y, possible loss of data
-		"/wd4267"						# same as 4244
-		"/wd4305"						# truncation from '' to 'char'
-		"/wd4309"						# truncation of constant value
-		"/wd4390"						# empty control statement, due to a DEBUG macro which requires trailing ;
-		"/wd4996"						# deprecated POSIX functions
-		"-D_CRT_SECURE_NO_WARNINGS"		# don't warn about deprecated functions
-		"-D_SCL_SECURE_NO_WARNINGS"		# don't warn about unsafe function calls (e.g. std::copy with raw pointers)
-		"-DNOMINMAX"					# prevent windows headers from defining min and max macros
-		"-DWIN32_LEAN_AND_MEAN"			# stop windows from including a bunch of garbage
-		"-DBOOST_ALL_DYN_LINK"			# ensure boost's auto-linking is enabled
-	)
-	foreach(FLAG ${MSVC_FLAGS})
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
-	endforeach()
+  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  # Disable specific warnings
+  set(MSVC_FLAGS
+    "/wd4250"						# inherits via dominance (rampant in the GTKMM codebase)
+    "/wd4101"						# unreferenced local variable
+    "/wd4244"						# conversion from x to y, possible loss of data
+    "/wd4267"						# same as 4244
+    "/wd4305"						# truncation from '' to 'char'
+    "/wd4309"						# truncation of constant value
+    "/wd4390"						# empty control statement, due to a DEBUG macro which requires trailing ;
+    "/wd4996"						# deprecated POSIX functions
+    "-D_CRT_SECURE_NO_WARNINGS"		# don't warn about deprecated functions
+    "-D_SCL_SECURE_NO_WARNINGS"		# don't warn about unsafe function calls (e.g. std::copy with raw pointers)
+    "-DNOMINMAX"					# prevent windows headers from defining min and max macros
+    "-DWIN32_LEAN_AND_MEAN"			# stop windows from including a bunch of garbage
+    "-DBOOST_ALL_DYN_LINK"			# ensure boost's auto-linking is enabled
+  )
+  foreach(FLAG ${MSVC_FLAGS})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
+  endforeach()
 endif()
 
 
@@ -245,6 +267,14 @@ configure_file(
    "${CMAKE_CURRENT_SOURCE_DIR}/config/pre_install.rtf.in"
    "${CMAKE_CURRENT_SOURCE_DIR}/config/pre_install.rtf"
    )
+configure_file(
+   "${CMAKE_CURRENT_SOURCE_DIR}/config/science.cadabra.cadabra2-gtk.desktop.in"
+   "${CMAKE_CURRENT_SOURCE_DIR}/config/science.cadabra.cadabra2-gtk.desktop"
+   )
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/frontend/gtkmm/science.cadabra.cadabra2-gtk.appdata.xml.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/frontend/gtkmm/science.cadabra.cadabra2-gtk.appdata.xml"  
+)
 
 
 #---------------------------------------------------------------------------
@@ -268,79 +298,102 @@ print_header("Configuring Python")
 # NEEDED TO USE CMAKE_INSTALL_FULL<dir>
 include(GNUInstallDirs)
 
-if(USE_PYTHON_3)
-	set(PYTHON_POSTFIX "3")
-	message(STATUS "Building for use with Python 3 (good!)")
-else()
-	set(PYTHON_POSTFIX "")
-	message(STATUS "Building for use with Python 2 (consider upgrading!)")
+set(Python_POSTFIX "3")
+#if(WIN32)
+#  # No amount of fiddling seems to convince cmake to use the MSYS2 python
+#  # instead of whatever other nonsense is installed on github runners.
+#  # So we force it to an exact version which is not available except in
+#  # the MSYS2 environment. Sue me.
+#  find_package(Python 3.11.10 EXACT REQUIRED COMPONENTS Interpreter Development)
+#else()
+  find_package(Python REQUIRED COMPONENTS Interpreter Development)
+#endif()
+find_package(pybind11 CONFIG)
+if (NOT pybind11_FOUND)
+  message(STATUS "Using included pybind11.")
+  add_subdirectory(libs/pybind11)
 endif()
 
-add_subdirectory(libs/pybind11)
+message(STATUS "Found python ${Python_LIBRARIES}")
+message(STATUS "Python version is ${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}.")
 
-message(STATUS "Found python ${PYTHON_LIBRARIES}")
-#find_package (Python COMPONENTS Interpreter)
-
-message(STATUS "Python version is ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.")
-# We used to install in a different location; let's remove files from there
-# if we find them on install.
-set(OLD_PYTHON_SITE_PATH ${CMAKE_INSTALL_FULL_LIBDIR}/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages)
-
-# The PYTHON_SITE_PATH variable is used throughout for installation purposes.
-# Note that some of the code (e.g. cadabra2-cli.cc) looks up this path based on the
-# location of the binary; make sure to change the search logic there too to keep it
-# compatible with what is done here.
-if(PACKAGING_MODE AND IS_DEBIAN_PACKAGE)
-   # Debian packages install all their Python things in 'dist-packages', not 'site-packages'.
-   set(PYTHON_SITE_PATH ${CMAKE_INSTALL_PREFIX}/lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/dist-packages)
-   set(PYTHON_SITE_DIST "dist-packages")
+# The PYTHON_SITE_PATH variable is used for installation purposes
+# only. It is ideally a path relative to CMAKE_INSTALL_PREFIX, not an
+# absolute path which uses this variable explictly. See the CMake docs
+# for `install`.
+if(WIN32)
+  set(PYTHON_SITE_PATH lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages)
+  # NOTE: if you change the CDB_BIN_PATH, you also need to change the stripping
+  # logic in InstallPrefix.cc. Note that CDB_BIN_PATH needs to be a relative path.
+  set(CDB_BIN_PATH .)
 else()
-   # For everyone else there is 'site-packages'. We get it from calling python, as otherwise
-   # we may be going wrong on e.g. Anaconda.
-   execute_process(
-     COMMAND ${PYTHON_EXECUTABLE} -c "import site; print(site.getsitepackages()[0])"
-     OUTPUT_VARIABLE PYTHON_SITE_PATH
-     OUTPUT_STRIP_TRAILING_WHITESPACE
-     )
-#   set(PYTHON_SITE_PATH ${CMAKE_INSTALL_PREFIX}/lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages)
-   set(PYTHON_SITE_DIST "site-packages")   
+  set(CDB_BIN_PATH bin)
+  if(PACKAGING_MODE AND IS_DEBIAN_PACKAGE)
+    # Debian packages install all their Python things in 'dist-packages', not 'site-packages'.
+    set(PYTHON_SITE_PATH lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages)
+    # set(Python_SITE_DIST "dist-packages")
+  elseif(APPIMAGE_MODE)
+    set(PYTHON_SITE_PATH lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages)
+    set(Python_SITE_DIST "dist-packages")
+  else()
+    # The builder can override the path by setting it externally.
+    if(NOT DEFINED PYTHON_SITE_PATH)
+      # set(PYTHON_SITE_PATH ${Python_SITEARCH})
+      # For everyone else there is 'site-packages' which we get from
+      # calling into python's 'site' package (and hoping that the 0th
+      # element is where we should be writing).
+      execute_process(
+	COMMAND ${Python_EXECUTABLE} -c "import site; print(site.getsitepackages()[0])"
+	OUTPUT_VARIABLE PYTHON_SITE_PATH
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+    endif()
+  endif()
 endif()
-message(STATUS "Installing Python module in ${PYTHON_SITE_PATH}")
+if(IS_ABSOLUTE ${PYTHON_SITE_PATH})
+  # CPack on windows complains if `install` commands contain absolute paths,
+  # so we do our best to make PYTHON_SITE_PATH relative to CMAKE_INSTALL_PREFIX.
+  # Of course, the net effect will be the same, as `install` with a relative
+  # DESTINATION will prepend CMAKE_INSTALL_PREFIX.
+  message(STATUS "Making PYTHON_SITE_PATH relative if possible")
+  string(REPLACE "${CMAKE_INSTALL_PREFIX}/" "" PYTHON_SITE_PATH_REL "${PYTHON_SITE_PATH}")
+  set(PYTHON_SITE_PATH ${PYTHON_SITE_PATH_REL})
+else()
+  message(STATUS "PYTHON_SITE_PATH is already relative")
+endif()
+
+message(STATUS "Installing Cadabra Python modules in (PYTHON_SITE_PATH) ${PYTHON_SITE_PATH}")
+message(STATUS "relative to CMake install prefix ${CMAKE_INSTALL_PREFIX}")
+# message(STATUS "Python standard  platform-independent installation directory (Python_STDLIB)   ${Python_STDLIB}")
+# message(STATUS "Python standard  platform-dependent   installation directory (Python_STDARCH)  ${Python_STDARCH}")
+# message(STATUS "Python 3rd-party platform-independent installation directory (Python_SITELIB)  ${Python_SITELIB}")
+# message(STATUS "Python 3rd-party platform-dependent   installation directory (Python_SITEARCH) ${Python_SITEARCH}")
 # We need to give our Python module an abi-name extension
 # so that it can be installed in a folder which does not
 # contain the abi name. See
 # https://www.python.org/dev/peps/pep-3149/
 execute_process(
-	COMMAND ${PYTHON_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_config_var('SOABI'))"
-	OUTPUT_VARIABLE PYTHON_SOABI
+	COMMAND ${Python_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_config_var('SOABI'))"
+	OUTPUT_VARIABLE Python_SOABI
 	OUTPUT_STRIP_TRAILING_WHITESPACE
 	)
-message(STATUS "Python abi name ${PYTHON_SOABI}")
-
-string(REGEX REPLACE "^${CMAKE_INSTALL_PREFIX}" "" PYTHON_SITE_PATH_REL ${PYTHON_SITE_PATH})
-set(PYTHON_SITE_PATH_REL ${PYTHON_SITE_PATH_REL})
-
-if(NOT WIN32)
-  execute_process(
-	 COMMAND ${PYTHON_EXECUTABLE} -c "import site; print (site.getsitepackages()[0]);"
-	 OUTPUT_VARIABLE OLDER_PYTHON_SITE_PATH
-	 OUTPUT_STRIP_TRAILING_WHITESPACE
-	 )
-endif()
+message(STATUS "Python abi name ${Python_SOABI}")
 
 # Suffixes
 if(WIN32)
 	set(STATIC_LIB_SUFFIX "lib")
 	set(SHARED_LIB_SUFFIX "dll")
-	set(PYTHON_MOD_SUFFIX "pyd")
+	set(Python_MOD_SUFFIX "pyd")
+	set(CMAKE_SHARED_LIBRARY_SUFFIX ".dll")
+	set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll" ".a")
 else()
 	set(STATIC_LIB_SUFFIX "a")
 	set(SHARED_LIB_SUFFIX "so")
-	set(PYTHON_MOD_EXT    "so")   
-	set(PYTHON_MOD_SUFFIX "${PYTHON_SOABI}.so")
+	set(Python_MOD_EXT    "so")   
+	set(Python_MOD_SUFFIX "${Python_SOABI}.so")
 endif()
 
-message(STATUS "Python module extension ${PYTHON_MOD_SUFFIX}")
+message(STATUS "Python module extension ${Python_MOD_SUFFIX}")
 
 
 #---------------------------------------------------------------------------
@@ -371,6 +424,11 @@ add_subdirectory(core)
 
 # Frontend
 if(ENABLE_FRONTEND)
+  set(ENABLE_MICROTEX TRUE)
+  if(ENABLE_MICROTEX)
+    set(USE_MICROTEX TRUE)
+    set(tinyxml2_BUILD_TESTING FALSE)
+  endif()
   add_subdirectory(frontend)
 endif()
 
@@ -388,6 +446,72 @@ configure_file(
 	"${PROJECT_SOURCE_DIR}/core/Config.hh"
 )
 
+# Some additional logic to install all runtime dependencies of our binaries
+# into the target installation directory on windows. 
+if(WIN32)
+  set(EXECUTABLES
+    core/cadabra2-cli
+    core/cdb-nbtool
+    client_server/cadabra-server
+    frontend/gtkmm/cadabra2-gtk
+  )
+  list(JOIN EXECUTABLES " " LEXECUTABLES)
+  # Custom command to run ldd, get dependencies, and install these in a
+  # folder ready to be processed by `install`. The 'ldd' command does not
+  # run on the '*.pyd' file, but if we rename or copy it to have extension '.dll'
+  # all goes through fine...
+  add_custom_command(
+    OUTPUT  dummy1
+    COMMAND cp core/cadabra2.pyd core/cadabra2.dll
+    COMMAND ${CMAKE_COMMAND} -E env bash -c "ldd /ucrt64/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.dll core/cadabra2.dll ${LEXECUTABLES} | sed -e '/not found/d' | grep '=>' | sed -e 's/^[^=]*=>[ ]*\\([^ ]*\\).*/\\1/' | sort | uniq > ${CMAKE_BINARY_DIR}/ldd_dependencies.txt"
+    COMMAND touch dummy1
+    VERBATIM
+    DEPENDS  core/cadabra2.pyd ${EXECUTABLES}
+    COMMENT "Using ldd to determine dependencies of ${EXECUTABLES}"
+  )
+  add_custom_command(
+    OUTPUT dummy2
+    DEPENDS dummy1
+    COMMAND ${CMAKE_COMMAND} -E env bash -c "cat ${CMAKE_BINARY_DIR}/ldd_dependencies.txt && mkdir -p ${CMAKE_SOURCE_DIR}/deps && for f in `cat ${CMAKE_BINARY_DIR}/ldd_dependencies.txt`; do cp \${f} ${CMAKE_SOURCE_DIR}/deps/; done"
+    COMMAND touch dummy2
+    VERBATIM
+    COMMENT "Copying dependencies into ${CMAKE_SOURCE_DIR}/deps"
+  )
+  add_custom_target("do_deps" ALL DEPENDS dummy2)
+  
+  # Install all the dependencies into the root destination folder.
+  install(DIRECTORY deps/ DESTINATION . FILES_MATCHING PATTERN "*.dll")      
+
+  # And install a few more which, for reasons unknown, are not reported by dll.
+  winstall(FILES /ucrt64/bin/libcharset-1.dll                DESTINATION .)
+  winstall(FILES /ucrt64/bin/librsvg-2-2.dll                 DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libxml2-2.dll                   DESTINATION .)  
+  winstall(FILES /ucrt64/bin/liblzma-5.dll                   DESTINATION .)
+  # FIXME: these can be found by running ldd on numpy and matplotlib dlls.
+  winstall(FILES /ucrt64/bin/libopenblas.dll                 DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libgomp-1.dll                   DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libgfortran-5.dll               DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libquadmath-0.dll               DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libsharpyuv-0.dll               DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libjpeg-8.dll                   DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libtiff-6.dll                   DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libdeflate.dll                  DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libjbig-0.dll                   DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libLerc.dll                     DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libwebp-7.dll                   DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libzstd.dll                     DESTINATION .)  
+  winstall(FILES /ucrt64/bin/imagequant.dll                  DESTINATION .)  
+  winstall(FILES /ucrt64/bin/libopenjp2-7.dll                DESTINATION .)  
+  
+  # We need gdbus to setup the dbus, needed by Glib, otherwise anything
+  # gtk-related will just bail out at start. We also need the helper
+  # program to spawn programs using Glib.
+  winstall(FILES /ucrt64/bin/gdbus.exe                       DESTINATION .)
+  winstall(FILES /ucrt64/bin/gspawn-win64-helper.exe         DESTINATION .)
+  winstall(FILES /ucrt64/bin/gspawn-win64-helper-console.exe DESTINATION .)
+  winstall(FILES /ucrt64/bin/gdk-pixbuf-query-loaders.exe    DESTINATION .)
+endif()
+    
 #---------------------------------------------------------------------------
 # Provide uninstall target.
 #---------------------------------------------------------------------------
@@ -401,5 +525,79 @@ configure_file(
 add_custom_target(uninstall
 	"${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_BINARY_DIR}/cmake/cmake_uninstall.cmake"
 )
+
+#---------------------------------------------------------------------------
+# Provide target to build AppImage.
+#---------------------------------------------------------------------------
+
+if(APPIMAGE_MODE)
+  # We need linuxdeploy to create the AppImage. It is best to have this built
+  # from source and installed locally. Make sure to first install deps by doing
+  #
+  #   sudo apt install libcimg-dev libgtest-dev
+  #
+  # Then checkout appimagetool, linuxdeploy, linuxdeploy-plugin-appimage using
+  #
+  #   git clone https://github.com/AppImage/appimagetool.git --recurse-submodules
+  #   git clone https://github.com/linuxdeploy/linuxdeploy.git --recurse-submodules
+  #   git clone https://github.com/linuxdeploy/linuxdeploy-plugin-appimage.git --recurse-submodules
+  #
+  # Do *not* forget the `--recurse-submodules` flag!
+  #
+  # Build `appimagetool` as usual, and for the other two use
+  #
+  #   cd linuxdeploy && mkdir build && cd build
+  #   cmake -DBUILD_TESTING=OFF ..
+  #   make && sudo make install
+  #
+  # and ditto for the plugin,
+  #
+  #   cd linuxdeploy && mkdir build && cd build
+  #   cmake -DBUILD_TESTING=OFF ..
+  #   make && sudo make install
+  #
+  # If you do not have it locally, the configure process will download an
+  # AppImage for linuxdeploy, but this does *not* run inside a QEMU container.
+  
+  print_header("Configuring AppImage build")
+  find_program(LINUXDEPLOY linuxdeploy "${CMAKE_BINARY_DIR}")
+  set(DEPLOY         linuxdeploy-${CMAKE_SYSTEM_PROCESSOR}.AppImage)
+  set(DEPLOY_URL     https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/${DEPLOY})
+  set(DEPLOY_GTK_URL https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh)
+  if(${LINUXDEPLOY} MATCHES "LINUXDEPLOY-NOTFOUND")
+    message(STATUS "The 'linuxdeploy' binary is not present, downloading one")
+    message(STATUS "Generating AppImage using ${DEPLOY_URL}")
+    if(NOT EXISTS "linuxdeploy")
+      message(STATUS "Downloading...")
+      file(DOWNLOAD ${DEPLOY_URL} ${CMAKE_BINARY_DIR}/linuxdeploy)
+      execute_process(COMMAND chmod u+x ${CMAKE_BINARY_DIR}/linuxdeploy)
+    endif()
+    set(LINUXDEPLOY ${CMAKE_BINARY_DIR}/linuxdeploy)
+  else()
+    message(STATUS "Found linuxdeploy at ${LINUXDEPLOY}")
+  endif()
+  if(NOT EXISTS "linuxdeploy-plugin-gtk.sh")
+      file(DOWNLOAD ${DEPLOY_GTK_URL} ${CMAKE_BINARY_DIR}/linuxdeploy-plugin-gtk.sh)
+      execute_process(COMMAND chmod u+x ${CMAKE_BINARY_DIR}/linuxdeploy-plugin-gtk.sh)
+  endif()
+  add_custom_target(appimage
+    COMMAND mkdir -p AppDir/${Python_SITELIB}
+    COMMAND cp -a ${CMAKE_SOURCE_DIR}/config/AppRun AppDir/
+    COMMAND chmod gou+x ${CMAKE_SOURCE_DIR}/config/AppRun AppDir/AppRun
+    COMMAND cp -a ${Python_SITELIB}/setuptools AppDir/${Python_SITELIB}/
+    COMMAND cp -a ${Python_STDARCH}/* AppDir/${Python_STDARCH}/
+    COMMAND ${LINUXDEPLOY} --appdir AppDir --plugin gtk --desktop-file AppDir/usr/share/applications/science.cadabra.cadabra2-gtk.desktop --output appimage
+    COMMAND mv Cadabra_2-${CMAKE_SYSTEM_PROCESSOR}.AppImage Cadabra_${CADABRA_VERSION_SEM}_${CMAKE_SYSTEM_PROCESSOR}.AppImage
+  )
+endif()
+
+if(WIN32)
+  add_custom_target(windows-installer
+    COMMAND cpack
+#    COMMAND osslsigncode sign -pkcs12 "/mnt/c/path/to/certificate.p12" -pass "certificate password" -n "Cadabra2" -i "https://cadabra.science" -t "http://timestamp.comodoca.com/authenticode" -in "cadabra2-${CADABRA_VERSION_MAJOR}.${CADABRA_VERSION_MINOR}.${CADABRA_VERSION_PATCH}-win64.exe" -out "cadabra2-${CADABRA_VERSION_MAJOR}.${CADABRA_VERSION_MINOR}.${CADABRA_VERSION_PATCH}-win64-installer.exe"
+    COMMAND gh auth setup-git
+    COMMAND release upload "${CADABRA_VERSION_SEM}" cadabra2-${CADABRA_VERSION_SEM}-win64.exe --clobber
+  )
+endif()
 
 print_header("All scripts completed")

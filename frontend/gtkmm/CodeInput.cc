@@ -55,24 +55,14 @@ void CodeInput::init(const Prefs& prefs)
 	//	scroll_.set_size_request(-1,200);
 	//	scroll_.set_border_width(1);
 	//	scroll_.set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_ALWAYS);
-	set_font_size(prefs.font_step);
-	edit.set_wrap_mode(Gtk::WRAP_NONE);
-
-	//	edit.override_background_color(Gdk::RGBA("white"), Gtk::STATE_FLAG_ACTIVE);
-
-	//	edit.set_name("mywidget");
-	//	gtk_rc_parse_string("style \"mywidget\"\n"
-	//							  "{\n"
-	//							  "  bg[NORMAL] = white\n"
-	//							  "}\n"
-	//							  "widget \"*.mywidget\" style \"mywidget\"");
-	//
-
+	edit.set_wrap_mode(Gtk::WRAP_NONE); // WRAP_WORD_CHAR); wrapping leads to weird effects
 	edit.set_pixels_above_lines(1);
 	edit.set_pixels_below_lines(1);
 	edit.set_pixels_inside_wrap(1);
+	// The following two are margins around the vbox which contains the
+	// text input and the LaTeX output(s).
 	set_margin_top(10);
-	set_margin_bottom(10);
+	set_margin_bottom(0);
 	//	edit.set_pixels_below_lines(Gtk::LINE_SPACING);
 	//	edit.set_pixels_inside_wrap(2*Gtk::LINE_SPACING);
 
@@ -601,16 +591,13 @@ bool CodeInput::handle_button_press(GdkEventButton* button)
 	else if(hastext)   sd=refClipboard->wait_for_contents("TEXT");
 	else if(hasstring) sd=refClipboard->wait_for_contents("STRING");
 	if(hascadabra || hastext || hasstring) {
-		// find out _where_ to insert
+		// Figure out where the mouse cursor is, so we know where to insert.
 		Gtk::TextBuffer::iterator insertpos;
 		int somenumber;
 		edit.get_iter_at_position(insertpos, somenumber, button->x, button->y);
 		if(insertpos!=edit.get_buffer()->end())
 			++insertpos;
-
-		// std::cerr << "inserting at " << insertpos << " text " << sd.get_data_as_string() << std::endl;
 		insertpos=edit.get_buffer()->insert(insertpos, sd.get_data_as_string());
-		// std::cerr << "placing cursor" << std::endl;
 		edit.get_buffer()->place_cursor(insertpos);
 		}
 
@@ -722,14 +709,3 @@ void CodeInput::slice_cell(std::string& before, std::string& after)
 	after =textbuf->get_slice(it, textbuf->end());
 	}
 
-void CodeInput::set_font_size(int num)
-	{
-	std::ostringstream fstr;
-	float size=9+(num*2);
-#ifdef __APPLE__
-	size*=1.5;
-#endif
-	fstr << "monospace " << size;
-	edit.override_font(Pango::FontDescription(fstr.str()));
-	edit.queue_resize();
-	}

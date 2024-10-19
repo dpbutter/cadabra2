@@ -10,6 +10,7 @@
 #include "properties/Depends.hh"
 #include "properties/DependsInherit.hh"
 #include "properties/Derivative.hh"
+#include "properties/DerivativeOp.hh"
 #include "properties/Determinant.hh"
 #include "properties/Diagonal.hh"
 #include "properties/DifferentialForm.hh"
@@ -55,6 +56,9 @@
 #include "properties/WeightInherit.hh"
 #include "properties/WeylTensor.hh"
 
+#include "DisplayTeX.hh"
+#include "DisplayTerminal.hh"
+#include "Media.hh"
 
 namespace cadabra {
 	namespace py = pybind11;
@@ -224,7 +228,7 @@ namespace cadabra {
 //		using cpp_type = typename base_type::cpp_type;
 		using py_type = typename base_type::py_type;
 
-		return py_type(m, name.c_str(), py::multiple_inheritance(), read_manual("properties", name.c_str()).c_str())
+		return py_type(m, name.c_str(), py::multiple_inheritance(), read_manual(m, "properties", name.c_str()).c_str())
 			.def_static("get", [](Ex_ptr ex, const std::string& label, bool ipr) { return base_type::get_from_kernel(ex->begin(), label, ipr); }, py::arg("ex"), py::arg("label") = "", py::arg("ignore_parent_rel") = false)
 			.def_static("get", [](ExNode node, const std::string& label, bool ipr) { return base_type::get_from_kernel(node.it, label, ipr); }, py::arg("exnode"), py::arg("label") = "", py::arg("ignore_parent_rel") = false)
 			.def("attach", &BoundPropT::attach)
@@ -240,7 +244,7 @@ namespace cadabra {
 		using cpp_type = typename base_type::cpp_type;
 		using py_type = typename base_type::py_type;
 
-		return py_type(m, std::make_shared<cpp_type>()->name().c_str(), py::multiple_inheritance(), read_manual("properties", std::make_shared<cpp_type>()->name().c_str()).c_str())
+		return py_type(m, std::make_shared<cpp_type>()->name().c_str(), py::multiple_inheritance(), read_manual(m, "properties", std::make_shared<cpp_type>()->name().c_str()).c_str())
 			.def(py::init<Ex_ptr, Ex_ptr>(), py::arg("ex"), py::arg("param")=Ex{})
 
 			.def_static("get", [](Ex_ptr ex, const std::string& label, bool ipr) { return base_type::get_from_kernel(ex->begin(), label, ipr); }, py::arg("ex"), py::arg("label") = "", py::arg("ignore_parent_rel") = false)
@@ -256,51 +260,64 @@ namespace cadabra {
 
 	pybind11::list list_properties()
 		{
-		//	std::cout << "listing properties" << std::endl;
+		// This function is fundamentally limited. We would *like* to return a list of
+		// BoundProperties, so that you can do something with the output. But we cannot
+		// walk the full property list and create a BoundProperty for each of them, as
+		// we do not know the type (we can only dynamic_cast).
+		//
+		// So for now this is just returning a list of LaTeXStrings, obtained by asking
+		// each property to print itself.
+		
 		Kernel *kernel = get_kernel_from_scope();
 		Properties& props = kernel->properties;
 
+		pybind11::dict globals = get_globals();
+		bool handles_latex_view = globals["server"].attr("handles")(pybind11::str("latex_view")).cast<bool>();
+		
 		pybind11::list ret;
 		std::string res;
 		bool multi = false;
 		for (auto it = props.pats.begin(); it != props.pats.end(); ++it) {
 			if (it->first->hidden()) continue;
-
+			
 			// print the property name if we are at the end or if the next entry is for
 			// a different property.
 			decltype(it) nxt = it;
 			++nxt;
 			if (res == "" && (nxt != props.pats.end() && it->first == nxt->first)) {
-				res += "{";
+				if(handles_latex_view) res += "\\{";
+				else                   res += "{";
 				multi = true;
 				}
-
-
-			//std::cerr << Ex(it->second->obj) << std::endl;
-			//		DisplayTeX dt(*get_kernel_from_scope(), it->second->obj);
+			
 			std::ostringstream str;
-			// std::cerr << "displaying" << std::endl;
-			//		dt.output(str);
-
-			str << it->second->obj;
-
-			// std::cerr << "displayed " << str.str() << std::endl;
+			if(handles_latex_view) {
+				DisplayTeX dt(*get_kernel_from_scope(), it->second->obj);
+				dt.output(str);
+				}
+			else {
+				DisplayTerminal dt(*get_kernel_from_scope(), it->second->obj);
+				dt.output(str);
+				}
+			
 			res += str.str();
-
+			
 			if (nxt == props.pats.end() || it->first != nxt->first) {
-				if (multi)
-					res += "}";
+				if (multi) {
+					if(handles_latex_view) res += "\\}";
+					else                   res += "}";
+					}
 				multi = false;
-				res += "::";
-				res += (*it).first->name();
-				ret.append(res);
+				res += "::\\texttt{";
+				res += (*it).first->name() + "}";
+				ret.append(LaTeXString(res));
 				res = "";
 				}
 			else {
 				res += ", ";
 				}
 			}
-
+		
 		return ret;
 		}
 
@@ -381,6 +398,7 @@ namespace cadabra {
 		using Py_CommutingAsSum = BoundProperty<CommutingAsSum, BoundPropertyBase>;
 		using Py_Distributable = BoundProperty<Distributable, BoundPropertyBase>;
 		using Py_Determinant = BoundProperty<Determinant, BoundPropertyBase>;
+		using Py_DerivativeOp = BoundProperty<DerivativeOp, BoundPropertyBase>;
 		using Py_FilledTableau = BoundProperty<FilledTableau, BoundPropertyBase>;
 		using Py_ImplicitIndex = BoundProperty<ImplicitIndex, BoundPropertyBase>;
 		using Py_ImaginaryI = BoundProperty<ImaginaryI, BoundPropertyBase>;
@@ -403,6 +421,7 @@ namespace cadabra {
 		def_prop<Py_Distributable>(m);
 		def_prop<Py_Determinant>(m)
 			.def_property_readonly("obj", [](const Py_Determinant & p) { return p.get_prop()->obj; });
+		def_prop<Py_DerivativeOp>(m);
 		def_prop<Py_FilledTableau>(m)
 			.def_property_readonly("dimension", [](const Py_FilledTableau & p) { return p.get_prop()->dimension; });
 		def_prop<Py_ImplicitIndex>(m)
