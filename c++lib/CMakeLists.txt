@@ -96,6 +96,7 @@ else()
   message(STATUS "Found gmpxx ${GMPXX_LIB}")
 endif()
 
+include_directories(/usr/include/python3.10)
 
 #---------------------------------------------------------------------------
 # Enumerate source files.

@@ -1104,6 +1104,12 @@ found:
 		return false;
 		}
 
+	void Ex::build_nodemap() {
+		// Run through the tree and build nodemap
+		for (auto it = begin(); it != end(); ++it) {
+			nodemap[*it->name].push_back(it);
+		}
+	}
 	}
 
 // Keep operator overloading outside of the cadabra namespace.
