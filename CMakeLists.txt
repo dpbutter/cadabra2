@@ -314,8 +314,20 @@ if (NOT pybind11_FOUND)
   add_subdirectory(libs/pybind11)
 endif()
 
+include_directories(${Python_INCLUDE_DIRS})
+link_directories(${Python_LIBRARY_DIRS})
+
 message(STATUS "Found python ${Python_LIBRARIES}")
 message(STATUS "Python version is ${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}.")
+
+# Add these debug messages
+message(STATUS "Python_INCLUDE_DIRS: ${Python_INCLUDE_DIRS}")
+message(STATUS "pybind11_INCLUDE_DIRS: ${pybind11_INCLUDE_DIRS}")
+
+# Explicitly add the include directories
+include_directories(SYSTEM ${Python_INCLUDE_DIRS})
+include_directories(SYSTEM ${pybind11_INCLUDE_DIRS})
+
 
 # The PYTHON_SITE_PATH variable is used for installation purposes
 # only. It is ideally a path relative to CMAKE_INSTALL_PREFIX, not an

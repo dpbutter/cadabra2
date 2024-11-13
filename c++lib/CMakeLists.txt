@@ -97,6 +97,7 @@ else()
   message(STATUS "Found gmpxx ${GMPXX_LIB}")
 endif()
 
+include_directories(/usr/include/python3.10)
 
 #---------------------------------------------------------------------------
 # Enumerate source files.
@@ -143,6 +144,7 @@ set(LOCAL_SRC_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Depends.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/DependsInherit.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Derivative.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/DerivativeOp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Determinant.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Diagonal.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/DifferentialForm.cc

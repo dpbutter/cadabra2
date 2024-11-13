@@ -279,12 +279,18 @@ namespace cadabra {
 			/// expression.
 			int  history_size() const;
 
+			void build_nodemap();
+			
+
 		private:
 			result_t state_;
 
 			std::vector<tree<str_node> > history;
 			/// Patterns which describe how to get from one history step to the next.
 			std::vector<std::vector<Ex::path_t> > terms;
+
+			// Keeping track of all pointers
+			std::map< std::string, std::vector<tree<str_node>::iterator> > nodemap;
 		};
 
 
