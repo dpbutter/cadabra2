@@ -314,6 +314,9 @@ namespace cadabra {
 
 			// Keeping track of all pointers
 			std::map< std::string, std::vector<tree<str_node>::iterator> > nodemap;
+
+			// Keep track of whether this is a smartEx object
+			bool smartEx = False;
 		};
 
 
