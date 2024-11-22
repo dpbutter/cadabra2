@@ -311,6 +311,10 @@ namespace cadabra {
 			// map from this particular point. Note: this searches on property type, not exact property.
 			//		template<class T>
 			//		property_map_t::iterator      get_pattern(property_map_t::iterator=props.begin());
+			template<class T>
+			property_map_t::iterator      get_pattern();
+			template<class T>
+			property_map_t::iterator      get_pattern(property_map_t::iterator);
 
 			// Equivalent search: given a node, get a pattern of equivalents.
 			//		property_map_t::iterator      get_equivalent(Ex::iterator,
@@ -546,5 +550,27 @@ done:
 			}
 		return dn;
 		}
+
+
+	template<class T>
+	Properties::property_map_t::iterator Properties::get_pattern() 
+		{
+		return get_pattern<T>(props.begin());
+		}
+
+	template<class T>
+	Properties::property_map_t::iterator Properties::get_pattern(Properties::property_map_t::iterator prop_it) 
+		{
+		// Return the next property of type T (or that inherits from T)
+		while (prop_it != props.end()) {
+			if (dynamic_cast<const T*>(prop_it->second.second)) {
+				return prop_it;
+			}
+			++prop_it;
+		}
+		return props.end();
+		}
+		
+
 
 	}
