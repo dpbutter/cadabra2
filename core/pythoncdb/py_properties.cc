@@ -168,7 +168,6 @@ namespace cadabra {
 
 	template <typename PropT, typename... ParentTs>
 	std::shared_ptr<BoundProperty<PropT, ParentTs...>> BoundProperty<PropT, ParentTs...>::get_from_kernel(Ex::iterator it, const std::string& label, bool ignore_parent_rel)
-
 	{
 		int tmp;
 		auto res = get_kernel_from_scope()->properties.get_with_pattern<PropT>(
@@ -243,6 +242,9 @@ namespace cadabra {
 		using base_type = BoundPropT;
 		using cpp_type = typename base_type::cpp_type;
 		using py_type = typename base_type::py_type;
+
+		// Register the property type for dynamic lookup.
+		py_property_registry.register_type<BoundPropT>();
 
 		return py_type(m, std::make_shared<cpp_type>()->name().c_str(), py::multiple_inheritance(), read_manual(m, "properties", std::make_shared<cpp_type>()->name().c_str()).c_str())
 			.def(py::init<Ex_ptr, Ex_ptr>(), py::arg("ex"), py::arg("param")=Ex{})
@@ -321,6 +323,71 @@ namespace cadabra {
 		return ret;
 		}
 
+	pybind11::list list_properties2() {
+		Kernel* kernel = get_kernel_from_scope();
+		Properties& props = kernel->properties;
+
+		/*
+		pybind11::dict globals = get_globals();
+		bool handles_latex_view = globals["server"].attr("handles")(pybind11::str("latex_view")).cast<bool>();
+		*/
+
+		pybind11::list ret;
+
+		for (auto it = props.pats.begin(); it != props.pats.end(); ++it) {
+			if (it->first->hidden()) continue;
+			const property* prop = it->first;
+			Ex_ptr ex_ptr = std::make_shared<Ex>(it->second->obj);
+			auto bound_property = py_property_registry.create_bound_property(prop, ex_ptr);
+			if (bound_property) {
+				ret.append(bound_property);
+			} else {
+				// Nothing to do yet.
+			}
+		}
+
+		return ret;
+	}
+
+
+	pybind11::list list_properties3() {
+		Kernel* kernel = get_kernel_from_scope();
+		Properties& props = kernel->properties;
+
+		/*
+		pybind11::dict globals = get_globals();
+		bool handles_latex_view = globals["server"].attr("handles")(pybind11::str("latex_view")).cast<bool>();
+		*/
+
+		pybind11::list ret;
+
+		for (auto it = props.pats.begin(); it != props.pats.end(); ++it) {
+			if (it->first->hidden()) continue;
+
+			auto nxt = it;
+			++nxt;
+			if (nxt != props.pats.end() && it->first == nxt->first) {
+				// If nxt property is the same, bind them together in a list
+				if (it->first->hidden()) continue;
+				pybind11::list shared_property;
+				while (it != props.pats.end() && it->first == nxt->first) {
+					const property* prop = it->first;
+					Ex_ptr ex_ptr = std::make_shared<Ex>(it->second->obj);
+					auto bound_property = py_property_registry.create_bound_property(prop, ex_ptr);
+					shared_property.append(bound_property);
+					it++;
+				}
+				it--;
+				ret.append(shared_property);
+			} else {
+				const property* prop = it->first;
+				Ex_ptr ex_ptr = std::make_shared<Ex>(it->second->obj);
+				auto bound_property = py_property_registry.create_bound_property(prop, ex_ptr);
+				ret.append(bound_property);
+			}
+		}
+		return ret;
+	}
 	std::vector<Ex> indices_get_all(const Indices* indices, bool include_wildcards)
 	{
 		auto kernel = get_kernel_from_scope();
@@ -346,6 +413,8 @@ namespace cadabra {
 		{
 
 		m.def("properties", &list_properties);
+		m.def("properties2", &list_properties2);
+		m.def("properties3", &list_properties3);
 
 		py::class_<BoundPropertyBase, std::shared_ptr<BoundPropertyBase>>(m, "Property")
 			.def_property_readonly("for_obj", &BoundPropertyBase::get_ex);
@@ -548,4 +617,6 @@ namespace cadabra {
 
 
 		}
+
+	BoundPropertyRegistry py_property_registry;
 	}

@@ -78,6 +78,41 @@ namespace cadabra {
 			const cpp_type* get_prop() const;
 		};
 
+
+	class BoundPropertyRegistry {
+	public:
+		using FactoryFunction = std::function<pybind11::object(const property*, Ex_ptr)>;
+
+		template <typename BoundPropT>
+		void register_type() {
+			const std::type_index type_id = typeid(typename BoundPropT::cpp_type);
+			if (registry_.count(type_id) > 0) {
+				throw std::runtime_error("Property already registered");
+			}
+
+			registry_[type_id] = [](const property* prop, Ex_ptr ex) {
+				auto casted_prop = dynamic_cast<const typename BoundPropT::cpp_type*>(prop);
+				if (!casted_prop) {
+					throw std::runtime_error("Failed to cast property");
+				}
+				return pybind11::cast(std::make_shared<BoundPropT>(casted_prop, ex));
+			};
+		}
+
+		pybind11::object create_bound_property(const property* prop, Ex_ptr ex) const {
+			std::type_index type_id = typeid(*prop);
+			auto it = registry_.find(type_id);
+			if (it == registry_.end()) {
+				// throw std::runtime_error("No BoundProperty registered for this type");
+				return pybind11::none();
+			}
+			return it->second(prop, ex);
+		}
+
+	private:
+		std::map<std::type_index, FactoryFunction> registry_;
+	};
+
 	template <typename PropT> std::string get_name();
 
 	template <typename BoundPropT> typename BoundPropT::py_type def_abstract_prop(pybind11::module& m);
@@ -87,4 +122,5 @@ namespace cadabra {
 
 	void init_properties(pybind11::module& m);
 
+	extern BoundPropertyRegistry py_property_registry;
 	}
