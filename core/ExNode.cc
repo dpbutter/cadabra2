@@ -87,6 +87,16 @@ ExNode ExNode::getitem_iterator(ExNode it)
 	return ret;
 	}
 
+std::vector<int> ExNode::path() const
+	{
+	return ex->path_from_iterator(it, ex->begin());
+	}
+
+int ExNode::depth() const
+	{
+	return ex->depth(it);
+	}
+
 void ExNode::setitem_string(std::string, std::shared_ptr<Ex>)
 	{
 	//   ExNode ret(ex);
@@ -205,6 +215,22 @@ ExNode ExNode::children()
 	ret.use_sibling_iterator=true;
 	ret.update(true);
 	return ret;
+	}
+
+ExNode& ExNode::to_parent()
+	{
+	try 
+		{
+		it = Ex::parent(it);
+		topit=it;
+		stopit=Ex::next_sibling(it);
+		update(true);
+		return *this;
+		} 
+	catch (const navigation_error& e) 
+		{
+		return *this;
+		}
 	}
 
 void ExNode::replace(std::shared_ptr<Ex> rep)
@@ -567,3 +593,27 @@ ExNode Ex_getitem_iterator(std::shared_ptr<Ex> ex, ExNode en)
 	return ret;
 	}
 
+
+bool ExNode::operator==(const ExNode& other) const
+	{
+	if (ex != other.ex)
+		return false;
+	return it.node == other.it.node;
+	}
+
+bool ExNode::operator!=(const ExNode& other) const
+	{
+	return !(*this == other);
+	}
+std::uintptr_t ExNode::get_node_id() const 
+	{
+        return reinterpret_cast<std::uintptr_t>(it.node);
+    }
+
+ExNode& ExNode::set_node_id(const std::uintptr_t& ptr)
+{
+    it.node = reinterpret_cast<decltype(it.node)>(ptr);
+	topit = it;
+	update(true);
+	return *this;
+}

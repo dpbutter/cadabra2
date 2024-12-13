@@ -41,7 +41,7 @@ set(INSTALL_INCLUDE_DIR include/cadabra2++ CACHE PATH "Installation directory fo
 option(USE_TREETRACKER "Use the TreeTracker scalar backend" OFF)
 set(PATH_TREETRACKER   "./treetracker" CACHE STRING "Path to the TreeTracker library")
 
-
+include_directories(/usr/include/python3.10)
 #---------------------------------------------------------------------------
 # Compiler flags.
 #---------------------------------------------------------------------------
@@ -143,6 +143,7 @@ set(LOCAL_SRC_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Depends.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/DependsInherit.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Derivative.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/DerivativeOp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Determinant.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/Diagonal.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/properties/DifferentialForm.cc

@@ -50,24 +50,6 @@ namespace cadabra {
 		return ex;
 		}
 
-	// A modified version of apply_algo_base to deal with ExNodes
-	// Pre_order behaviour remains unchanged
-	template <class Algo>
-	Ex_ptr apply_algo_base_node(Algo& algo, Ex_ptr ex, ExNode& node, bool deep, bool repeat, unsigned int depth, bool pre_order=false)
-		{
-		Ex::iterator it = node.it;
-		if (ex->is_valid(it)) {
-			ProgressMonitor* pm = get_progress_monitor();
-			algo.set_progress_monitor(pm);
-			if(pre_order)
-				ex->update_state(algo.apply_pre_order(repeat));
-			else
-				ex->update_state(algo.apply_generic(it, deep, repeat, depth));
-			call_post_process(*get_kernel_from_scope(), ex);
-			}
-
-		return ex;
-		}
 
 	template <class Algo>
 	Ex_ptr apply_algo(Ex_ptr ex, bool deep, bool repeat, unsigned int depth)
@@ -152,7 +134,7 @@ namespace cadabra {
 		      pybind11::arg("depth") = depth,
 		      pybind11::doc(read_manual(m, "algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
-		
+
 		// Extend algorithms to work with ExNodes directly
 		m.def(name,
 		      &apply_algo_node<Algo, Args...>,
@@ -161,7 +143,7 @@ namespace cadabra {
 		      pybind11::arg("deep") = deep,
 		      pybind11::arg("repeat") = repeat,
 		      pybind11::arg("depth") = depth,
-		      pybind11::doc(read_manual("algorithms", name).c_str()),
+		      pybind11::doc(read_manual(m,"algorithms", name).c_str()),
 		      pybind11::return_value_policy::reference_internal);
 
 		}

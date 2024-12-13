@@ -31,6 +31,8 @@
 
 // #define DEBUG 1
 
+#include <pybind11/stl.h>
+
 namespace cadabra {
 
 	namespace py = pybind11;
@@ -675,6 +677,7 @@ namespace cadabra {
 		.def("copy", [](const Ex& ex) { return std::make_shared<Ex>(ex); })
 		.def("changed", &Ex::changed_state)
 		.def("cleanup", &Ex_cleanup)
+		.def("size", [](const Ex &ex) { return ex.size(); })
 		.def("__hash__", [](const Ex& ex) { return ex.calc_hash(ex.begin()); })
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const ExNode)>(&Ex_add), py::is_operator{})
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const Ex_ptr)>(&Ex_add), py::is_operator{})
@@ -687,6 +690,7 @@ namespace cadabra {
 		));
 
 		pybind11::class_<ExNode>(m, "ExNode", "Iterator over elements of an Ex mathematical expression.")
+			.def("__eq__", &ExNode::operator==)
 			.def("__iter__", &ExNode::iter)
 			.def("__next__", &ExNode::next, pybind11::return_value_policy::reference_internal)
 			.def("input_form",  &ExNode::input_form)
@@ -704,6 +708,7 @@ namespace cadabra {
 			.def("free_indices", &ExNode::free_indices, "Return an ExNode iterator over all free indices.")
 			.def("args", &ExNode::args)
 			.def("children", &ExNode::children)
+			.def("to_parent", &ExNode::to_parent)
 			.def("replace", &ExNode::replace, "Replace the node pointed to by ExNode with the given Ex.")
 			.def("insert", &ExNode::insert, "Insert the given Ex in front of the node pointed to by the ExNode.")
 			.def("insert", &ExNode::insert_it, "Insert the node pointed to by the given ExNode in front of the ExNode.")
@@ -711,11 +716,16 @@ namespace cadabra {
 			.def("append_child", &ExNode::append_child_it, "Append the node pointed to by the given ExNode as a child of the node pointed to by the ExNode.")
 			.def("erase", &ExNode::erase, "Erase the node pointed to by the ExNode.")
 			.def("ex", &ExNode::get_ex, "Obtain a copy of the node pointed to by the ExNode.")
+			.def("copy", &ExNode::copy, "Create a copy of the ExNode itself.")
+			.def("path", &ExNode::path, "Return a path to the ExNode.")
+			.def("depth", &ExNode::depth, "Return the depth of the ExNode.")
 			.def("compare", &ExNode_compare,
 				py::arg("other"), py::arg("use_props") = "always", py::arg("ignore_parent_rel") = false)
 			.def_property("name", &ExNode::get_name, &ExNode::set_name, "Set the name property of the node pointed to by the ExNode.")
 			.def_property("parent_rel", &ExNode::get_parent_rel, &ExNode::set_parent_rel)
 			.def_property("multiplier", &ExNode::get_multiplier, &ExNode::set_multiplier)
+			.def("get_id", &ExNode::get_node_id)
+			.def("set_id", &ExNode::set_node_id)
 			.def("__add__", [](ExNode a, Ex_ptr b) {
 								 return a.add_ex(b);
 								 }, pybind11::is_operator{});

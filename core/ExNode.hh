@@ -118,6 +118,9 @@ class ExNode : public cadabra::IndexClassifier {
 		/// children (a sibling iterator, in other words).
 		ExNode      children();
 
+		// Move iterator to parent (returns true if possible)
+		ExNode&      to_parent();
+
 		std::string tag;
 		bool        indices_only, args_only, terms_only, factors_only;
 
@@ -125,6 +128,22 @@ class ExNode : public cadabra::IndexClassifier {
 		/// Switches behaviour depending on use_sibling_iterator, use_index_iterator,
 		/// indices_only, args_only, terms_only, factors_only;
 		void update(bool first);
+
+		/// Return the path to the iterator
+		std::vector<int> path() const;
+
+		/// Return the depth of the iterator
+		int depth() const;
+		
+		/// Comparison operators for ExNodes
+		bool operator==(const ExNode&) const;
+		bool operator!=(const ExNode&) const;
+
+		/// Direct access to pointer address
+		std::uintptr_t get_node_id() const;
+		
+		/// Reset ExNode to point to a node given by ptr
+		ExNode& set_node_id(const std::uintptr_t&);
 
 		cadabra::Ex::iterator         nxtit;
 		cadabra::Ex::sibling_iterator sibnxtit;
@@ -136,6 +155,7 @@ class ExNode : public cadabra::IndexClassifier {
 
 		index_map_t                   ind_free, ind_dummy;
 		index_position_map_t          ind_pos_dummy;
+
 
 	private:
 	};
