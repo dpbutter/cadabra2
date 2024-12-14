@@ -1104,12 +1104,67 @@ found:
 		return false;
 		}
 
-	void Ex::build_nodemap() {
-		// Run through the tree and build nodemap
-		for (auto it = begin(); it != end(); ++it) {
-			nodemap[*it->name].push_back(it);
+
+	// Additional functionality for nodemaps
+	
+	void Ex::map_on()
+		{
+		// The Ex_Nodemap is owned uniquely by this pointer.
+		this->nodemap = std::make_unique<Ex_Nodemap>();
+		this->nodemap->build(this);
+		}
+
+	void Ex::map_off()
+		{
+		// Turn off the map and free the memory
+		this->nodemap.reset();
+		}
+
+	bool Ex::is_mapped()
+		{
+		return this->nodemap != nullptr;
+		}
+
+	void Ex_Nodemap::build(Ex* ex_ptr) 
+		{
+		// Assign the Ex expression to the nodemap
+		ex_ptr_= ex_ptr;
+		// Clear the node map, so that we can use `build` to rebuild
+		map_.clear();
+		build_subtree(ex_ptr_->begin());
+		}
+	
+	void Ex_Nodemap::build_subtree(Ex::iterator start) {
+		// start is the iterator to the base node
+		Ex::post_order_iterator it = start;
+
+		// Process the start iterator
+		int node_depth = ex_ptr_->depth(it);
+		if (it->fl.parent_rel == str_node::parent_rel_t::p_none && !it->is_rational()) {
+			node_sets_t &node_sets = this->map_[*(it->name)];
+			if (node_sets.size() < node_depth+1) {
+				node_sets.resize(node_depth+1);
+			}
+			node_sets[node_depth].insert(it.node);
+		}
+		// push iterator all the way to the first leaf node
+		it.descend_all();
+
+		// Process all subtree elements until we get back to start
+		while (it.node != start.node) {
+			node_depth = ex_ptr_->depth(it);
+			if (it->fl.parent_rel == str_node::parent_rel_t::p_none && !it->is_rational()) {
+				node_sets_t &node_sets = this->map_[*(it->name)];
+				if (node_sets.size() < node_depth+1) {
+					node_sets.resize(node_depth+1);
+				}
+				node_sets[node_depth].insert(it.node);
+			}
+			++it;
 		}
 	}
+
+
 	}
 
 // Keep operator overloading outside of the cadabra namespace.
