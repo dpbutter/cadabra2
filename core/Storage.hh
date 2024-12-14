@@ -131,6 +131,8 @@ namespace cadabra {
 	void     half(rset_t::iterator&);
 	void     set(rset_t::iterator&, multiplier_t);
 	
+	class Ex_Nodemap;
+
 	/// \ingroup core
 	///
 	/// Basic storage class for symbolic mathemematical expressions. The
@@ -279,8 +281,10 @@ namespace cadabra {
 			/// expression.
 			int  history_size() const;
 
-			void build_nodemap();
-			
+			// Routines for dealing with the node map
+			void map_on();
+			void map_off();
+			bool is_mapped();
 
 		private:
 			result_t state_;
@@ -290,12 +294,42 @@ namespace cadabra {
 			std::vector<std::vector<Ex::path_t> > terms;
 
 			// Keeping track of all pointers
-			std::map< std::string, std::vector<tree<str_node>::iterator> > nodemap;
-
-			// Keep track of whether this is a smartEx object
-			bool smartEx = false;
+			std::unique_ptr<Ex_Nodemap> nodemap;
 		};
 
+
+	/// Ex_Nodemap class for providing a map of an Ex object
+	class Ex_Nodemap {
+		/* 
+		* A nodemap is a dictionary for looking up nodes throughout the Ex tree.
+		* 
+		* Pointers to tree nodes are stored in a map (using the node name as key),
+		* whose value is a vector with index corresponding to the depth of the node
+		* in the tree.
+		* 
+		* For example, the tree   A->B, A->C would be stored as
+		* map['A'] = [set(ptr)]
+		* map['B'] = [set(), set(ptr)]
+		* map['C'] = [set(), set(ptr)]
+		* 		 
+		* The length of the 'depth vector' is increased when needed.
+		* It is decreased only under a map cleanup routine.
+		*/
+
+		public:
+			typedef tree_node_<str_node>                     tree_node_t;
+			typedef std::set<tree_node_t*>                   node_set_t; 
+			typedef std::vector<node_set_t>                  node_sets_t;
+			typedef std::map<std::string, node_sets_t>       nodemap_t;
+		
+			void build(Ex*);
+			void build_subtree(Ex::iterator);
+			
+		private:
+			nodemap_t   map_;
+			Ex*			ex_ptr_;				// Pointer to the Ex object used by nodemap
+		};
+	
 
 	/// \ingroup core
 	///
