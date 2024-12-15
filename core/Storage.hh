@@ -131,7 +131,7 @@ namespace cadabra {
 	void     half(rset_t::iterator&);
 	void     set(rset_t::iterator&, multiplier_t);
 	
-	class Ex_Nodemap;
+	class Ex_Nodemap; // Forward declaration of Ex_Nodemap
 
 	/// \ingroup core
 	///
@@ -309,6 +309,9 @@ namespace cadabra {
 			void map_off();
 			bool is_mapped();
 
+			// Keeping track of all pointers
+			std::unique_ptr<Ex_Nodemap> nodemap;
+
 		private:
 			result_t state_;
 
@@ -316,8 +319,6 @@ namespace cadabra {
 			/// Patterns which describe how to get from one history step to the next.
 			std::vector<std::vector<Ex::path_t> > terms;
 
-			// Keeping track of all pointers
-			std::unique_ptr<Ex_Nodemap> nodemap;
 		};
 
 
@@ -331,10 +332,10 @@ namespace cadabra {
 		* in the tree.
 		* 
 		* For example, the tree   A->B, A->C would be stored as
-		* map['A'] = [set(ptr)]
-		* map['B'] = [set(), set(ptr)]
-		* map['C'] = [set(), set(ptr)]
-		* 		 
+		* map['A'] = [set(A_ptr)]
+		* map['B'] = [set(), set(B_ptr)]
+		* map['C'] = [set(), set(C_ptr)]
+		* 
 		* The length of the 'depth vector' is increased when needed.
 		* It is decreased only under a map cleanup routine.
 		*/
@@ -345,12 +346,18 @@ namespace cadabra {
 			typedef std::vector<node_set_t>                  node_sets_t;
 			typedef std::map<std::string, node_sets_t>       nodemap_t;
 		
-			void build(Ex*);
-			void build_subtree(Ex::iterator);
+			Ex_Nodemap(Ex* ex_ptr) : ex_ptr_(ex_ptr) {build();}
+			void build();
+			void add_subtree(Ex::iterator);
+			void remove_subtree(Ex::iterator);
+			void find_pattern(Ex&);
 			
 		private:
 			nodemap_t   map_;
 			Ex*			ex_ptr_;				// Pointer to the Ex object used by nodemap
+
+			bool find_pattern_recursive_(Ex::iterator, int, node_set_t&);
+			void map_nodes_to_parents_(node_set_t, node_set_t&);
 		};
 	
 
