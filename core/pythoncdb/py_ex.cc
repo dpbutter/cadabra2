@@ -675,6 +675,7 @@ namespace cadabra {
 		.def("copy", [](const Ex& ex) { return std::make_shared<Ex>(ex); })
 		.def("changed", &Ex::changed_state)
 		.def("cleanup", &Ex_cleanup)
+		.def("size", [](const Ex& ex) { return ex.size();})
 		.def("__hash__", [](const Ex& ex) { return ex.calc_hash(ex.begin()); })
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const ExNode)>(&Ex_add), py::is_operator{})
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const Ex_ptr)>(&Ex_add), py::is_operator{})
