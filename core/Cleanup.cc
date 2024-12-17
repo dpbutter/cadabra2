@@ -24,9 +24,11 @@ namespace cadabra {
 #ifdef DEBUG
 		std::cerr << "cleanup at " << *it->name << std::endl;
 #endif
+		if (tr.is_mapped()) {
+			tr.nodemap->remove_subtree(it);
+		}
 
 		// Run the cleanup as long as the expression changes.
-
 		bool changed;
 		do {
 			changed=false;
@@ -96,6 +98,10 @@ namespace cadabra {
 
 			}
 		while(changed);
+
+		if (tr.is_mapped()) {
+			tr.nodemap->add_subtree(it);
+		}
 
 		//	std::cerr << Ex(it) << std::endl;
 		}

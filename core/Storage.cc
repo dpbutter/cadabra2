@@ -1195,9 +1195,35 @@ found:
 		}
 	}
 
+	// Clean up a nodemap by removing entries that are no longer needed
+	void Ex_Nodemap::cleanup() {
+		for (auto it = map_.begin(); it != map_.end();) {
+			// Removing unused depths at the end of each node_sets
+			shrink_(it->second);
+			// If the node_sets are now vanishing, we can just delete the key.
+			if (it->second.size() == 0) {
+				it = map_.erase(it);
+			} else {
+				++it;
+			}
+	    }
+	}
+
+	int Ex_Nodemap::used_depth_(node_sets_t& node_sets) const {
+		for (int i=node_sets.size()-1; i>=0; i--) {
+			if (node_sets[i].size() > 0) {
+				return i+1;
+			}
+		}
+		return 0;
+	}
+
+	void Ex_Nodemap::shrink_(node_sets_t& node_sets) {
+		node_sets.resize(used_depth_(node_sets));
+	}
 
 	// Loosely find matches for a pattern using the nodemap
-	void Ex_Nodemap::find_pattern(Ex& pattern) {
+	Ex_Nodemap::node_sets_t Ex_Nodemap::find_pattern(Ex& pattern) {
 		/* Match the name nodes in a pattern against nodes in the nodemap, 
 		 * ignoring indices (which are not tracked).
 		 *
@@ -1206,6 +1232,8 @@ found:
 		 * Moreover, there is at least one valid name somewhere in the pattern tree.
 		 * (i.e. the pattern cannot consist of only name wildcards, since it would
 		 * be impossible to match using our approach.)
+		 * 
+		 * FIXME: Think about this more.
 		 */
 		Ex::iterator start = pattern.begin();
 
@@ -1238,6 +1266,10 @@ found:
 
 		}
 		assert(useful_result);
+		
+		// Use explicit move of found_nodes
+		// return std::move(found_nodes);
+		return found_nodes;
 	}
 
 	// Match the pattern beginning at given depth, returning true if pattern valid
@@ -1266,7 +1298,7 @@ found:
 		bool some_child_nodes_useful = false;	// at least one valid child node
 		node_set_t parents_of_child_nodes;		// intersection of all parents of valid child nodes
 
-		for (auto child_it = it.begin(); child_it != it.end(); ++it ) {
+		for (auto child_it = it.begin(); child_it != it.end(); ++child_it ) {
 			node_set_t child_nodes;
 			if (!find_pattern_recursive_(child_it, node_depth+1, child_nodes)) {
 				// If the child node doesn't tell us anything useful, we skip it
@@ -1276,11 +1308,9 @@ found:
 			some_child_nodes_useful = true;
 
 			// map child_nodes to their parent
-			node_set_t parents_of_child_nodes;
-			map_nodes_to_parents_(child_nodes, parents_of_child_nodes);
+			parents_of_child_nodes = map_nodes_to_parents_(child_nodes);
 			
 			if (!node_useful) {
-				// node_set is empty here *only* if the node was a wildcard.
 				// In this case, just assign the parents_of_child_nodes to it.
 				node_set = parents_of_child_nodes;
 			} else {
@@ -1303,13 +1333,17 @@ found:
 		return node_useful || some_child_nodes_useful;
 	}
 
-	void Ex_Nodemap::map_nodes_to_parents_(node_set_t child_nodes, node_set_t& parent_nodes) {
+	Ex_Nodemap::node_set_t Ex_Nodemap::map_nodes_to_parents_(node_set_t child_nodes) {
+			node_set_t parent_nodes;
 		    std::transform(child_nodes.begin(), child_nodes.end(), 
                    		   std::inserter(parent_nodes, parent_nodes.end()),
                  		   [](tree_node_t* node) { return node->parent; });
 			
 			// Eliminate null parent pointers. (This should probably never happen???)
 			parent_nodes.erase(nullptr);
+			// Explicit move
+			// return std::move(parent_nodes);
+			return parent_nodes;
 	}
 
 

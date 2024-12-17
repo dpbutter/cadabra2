@@ -40,7 +40,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <sstream>
 
-//#define DEBUG
+#define DEBUG
 
 using namespace cadabra;
 
@@ -193,7 +193,17 @@ Algorithm::result_t Algorithm::apply_once(Ex::iterator& it)
 	// std::cerr << "=== apply_once ===" << std::endl;
 	if(traverse_ldots || !tr.is_hidden(it)) {
 		if(can_apply(it)) {
+			// Remove the terms from the nodemap
+			if (tr.is_mapped()) {
+				tr.nodemap->remove_subtree(it);
+			}
+
 			result_t res=apply(it);
+
+			// Add the terms back to the nodemap
+			if (tr.is_mapped()) {
+				tr.nodemap->add_subtree(it);
+			}
 			// std::cerr << "apply algorithm at " << *it->name << std::endl;
 			if(res==result_t::l_applied || res==result_t::l_applied_no_new_dummies) {
 				cleanup_dispatch(kernel, tr, it);
@@ -263,7 +273,15 @@ Algorithm::result_t Algorithm::apply_deep(Ex::iterator& it)
 			post_order_iterator next(current);
 			++next;
 			bool work_is_topnode=(work==it);
+			// Remove the terms from the nodemap
+			if (tr.is_mapped()) {
+				tr.nodemap->remove_subtree(work);
+			}
 			result_t res = apply(work);
+			// Add the terms back to the nodemap
+			if (tr.is_mapped()) {
+				tr.nodemap->add_subtree(work);
+			}
 			if(res==Algorithm::result_t::l_applied || res==Algorithm::result_t::l_applied_no_new_dummies) {
 				some_changes_somewhere=result_t::l_applied;
 				if(res==Algorithm::result_t::l_applied) {
@@ -326,28 +344,38 @@ void Algorithm::propagate_zeroes(post_order_iterator& it, const iterator& topnod
 #endif
 //	if(!tr.is_valid(walk))
 //		return;
+	
+	// walk is the parent of it
 
 	const Derivative *der=kernel.properties.get<Derivative>(walk);
 	const Trace *trace=kernel.properties.get<Trace>(walk);
+	
+	// if the parent node is a product, a derivative, or a trace...
 	if(*walk->name=="\\prod" || der || trace) {
 		if(der && it->is_index()) return;
+		// set the parent node multiplier to 0
 		walk->multiplier=rat_set.insert(0).first;
+		// update the iterator to the parent and recurse
 		it=walk;
 		propagate_zeroes(it, topnode);
 		// Removing happens in the next step.
 		}
 	else if(*walk->name=="\\pow") {
+		// if the parent node is a power
 		if(tr.index(it)==0) { // the argument is zero
+			// This is 0 to some positive/or zero power
 			sibling_iterator arg=it;
 			++arg;
 			if(*arg->multiplier<0) 
 				throw RuntimeException("Division by zero encountered.");
-			
+			// set the parent node multiplier to 0			
 			walk->multiplier=rat_set.insert(0).first;
+			// update the iterator to the parent and recurse
 			it=walk;
 			propagate_zeroes(it, topnode);
 			}
 		else {   // the exponent
+			// FIXME: This is buggy.
 			rset_t::iterator rem=walk->multiplier;
 			tr.erase(it);
 			tr.flatten(walk);
@@ -357,14 +385,21 @@ void Algorithm::propagate_zeroes(post_order_iterator& it, const iterator& topnod
 			}
 		}
 	else if(*walk->name=="\\sum") {
+		// If the sum has two other children...
 		if(tr.number_of_children(walk)>2) {
+			// If the next sibling of it is valid (i.e. still in the sum)
 			if(tr.is_valid(tr.next_sibling(it))) {
+				// Erase the zero node
 				it=tr.erase(it);
+				// Go to the bottom of the next node (continue post-order iteration)
 				it.descend_all();
 				}
 			else {
+				// `it` points to last term in the sum
 				iterator ret=tr.parent(it);
+				// Erase the zero node.
 				tr.erase(it);
+				// Go the parent node. (The sum.)
 				it=ret;
 				}
 			}
@@ -378,7 +413,8 @@ void Algorithm::propagate_zeroes(post_order_iterator& it, const iterator& topnod
 				//				it=tr.next_sibling(it); // Added but wrong?
 				return;
 				}
-
+			// If the sum node is not the topnode, we can work.
+			// Erase the zero node.
 			tr.erase(it);
 			iterator singlearg=tr.begin(walk);
 			if(singlearg!=tr.end(walk)) {
@@ -400,6 +436,7 @@ void Algorithm::propagate_zeroes(post_order_iterator& it, const iterator& topnod
 		iterator nn=tr.insert_after(it, str_node("1"));
 		nn->fl.parent_rel=it->fl.parent_rel;
 		nn->fl.bracket=it->fl.bracket;
+		// Erase the zero node.
 		it=tr.erase(it);
 		zero(it->multiplier);
 		}

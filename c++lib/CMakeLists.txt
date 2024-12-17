@@ -39,7 +39,7 @@ set(INSTALL_INCLUDE_DIR include/cadabra2++ CACHE PATH "Installation directory fo
 # Scalar backend options
 option(USE_TREETRACKER "Use the TreeTracker scalar backend" OFF)
 set(PATH_TREETRACKER   "./treetracker" CACHE STRING "Path to the TreeTracker library")
-
+include_directories(/usr/include/python3.10)
 
 #---------------------------------------------------------------------------
 # Compiler flags.

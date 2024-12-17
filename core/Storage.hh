@@ -345,19 +345,27 @@ namespace cadabra {
 			typedef std::set<tree_node_t*>                   node_set_t; 
 			typedef std::vector<node_set_t>                  node_sets_t;
 			typedef std::map<std::string, node_sets_t>       nodemap_t;
-		
+			
+			/// Queued iterator
+			typedef std::deque<tree_node_t*>::iterator		 queued_iterator;
+
 			Ex_Nodemap(Ex* ex_ptr) : ex_ptr_(ex_ptr) {build();}
+			
 			void build();
 			void add_subtree(Ex::iterator);
 			void remove_subtree(Ex::iterator);
-			void find_pattern(Ex&);
+			node_sets_t find_pattern(Ex&);
+			void cleanup();
 			
 		private:
 			nodemap_t   map_;
 			Ex*			ex_ptr_;				// Pointer to the Ex object used by nodemap
 
 			bool find_pattern_recursive_(Ex::iterator, int, node_set_t&);
-			void map_nodes_to_parents_(node_set_t, node_set_t&);
+			node_set_t map_nodes_to_parents_(node_set_t);
+			int used_depth_(node_sets_t&) const;
+			void shrink_(node_sets_t&);
+
 		};
 	
 
