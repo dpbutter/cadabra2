@@ -774,9 +774,31 @@ found:
 		return history.size();
 		}
 
+	void Ex::rename(const iterator_base& it, const nset_t::iterator& new_name) {
+		if (is_mapped()) nodemap->unmap_node(it);
+		it->name=new_name;
+		if (is_mapped()) nodemap->map_node(it);
+	}
+
+	void Ex::rename(const iterator_base& it, const std::string& str) {
+		if (is_mapped()) nodemap->unmap_node(it);
+		it->name=name_set.insert(str).first;
+		if (is_mapped()) nodemap->map_node(it);
+	}
+
+	void Ex::rename(const iterator_base& it, std::string&& str) {
+		if (is_mapped()) nodemap->unmap_node(it);
+		it->name=name_set.insert(str).first;
+		if (is_mapped()) nodemap->map_node(it);
+	}
+
+
+
 	str_node::str_node(void)
 		{
 		multiplier=rat_set.insert(1).first;
+		// Need to initialize the name to some valid string to avoid problems with nodemap.
+		name=name_set.insert("").first;
 		//	fl.modifier=m_none;
 		fl.bracket=b_none;
 		fl.parent_rel=p_none;
@@ -1046,6 +1068,15 @@ found:
 		return false;
 		}
 
+
+	bool str_node::is_labelled() const {
+		return !(is_index() || is_rational() || *name=="");
+	}
+
+	std::string str_node::label() const {
+		return *name;
+	}
+
 	bool nset_it_less::operator()(nset_t::iterator first, nset_t::iterator second) const
 		{
 		if(*first < *second)
@@ -1105,246 +1136,6 @@ found:
 		return false;
 		}
 
-
-	// Additional functionality for nodemaps
-	
-	void Ex::map_on()
-		{
-		// The Ex_Nodemap is owned uniquely by this pointer.
-		this->nodemap = std::make_unique<Ex_Nodemap>(this);
-		}
-
-	void Ex::map_off()
-		{
-		// Turn off the map and free the memory
-		this->nodemap.reset();
-		}
-
-	bool Ex::is_mapped()
-		{
-		return this->nodemap != nullptr;
-		}
-
-	// Builds (or rebuilds) a node map
-	void Ex_Nodemap::build() 
-		{
-		// Clear the node map, so that we can use `build` to rebuild
-		map_.clear();
-		add_subtree(ex_ptr_->begin());
-		}
-	
-	// Add a subtree to the nodemap
-	void Ex_Nodemap::add_subtree(Ex::iterator start) {
-		// start begins at root node of the subtree
-		Ex::post_order_iterator it = start;
-
-		// Add subtree root to node map
-		int node_depth = ex_ptr_->depth(it);
-		
-		if ( !(it->is_index() || it->is_rational()) ) {
-			node_sets_t &node_sets = map_[*(it->name)];
-			if (node_sets.size() < node_depth+1) {
-				node_sets.resize(node_depth+1);
-			}
-			node_sets[node_depth].insert(it.node);
-		}
-
-		// push post_order iterator all the way to the first leaf node
-		it.descend_all();
-		// Process all subtree elements until we return to root
-		while (it.node != start.node) {
-			node_depth = ex_ptr_->depth(it);
-			
-			if ( !(it->is_index() || it->is_rational()) ) {
-				node_sets_t &node_sets = map_[*(it->name)];
-				if (node_sets.size() < node_depth+1) {
-					node_sets.resize(node_depth+1);
-				}
-				node_sets[node_depth].insert(it.node);
-			}
-			++it;
-		}
-	}
-	
-	// Remove a subtree from the nodemap
-	void Ex_Nodemap::remove_subtree(Ex::iterator start) {
-		// start begins at root node of the subtree
-		Ex::post_order_iterator it = start;
-
-		// Remove subtree root from node map
-		int node_depth = ex_ptr_->depth(it);
-		if ( !(it->is_index() || it->is_rational()) ) {
-			// If name is not present in map_, this will insert it.
-			node_sets_t &node_sets = map_[*(it->name)];
-			if (node_depth < node_sets.size()) {
-				node_sets[node_depth].erase(it.node);
-			}
-		}
-		// push post_order iterator all the way to the first leaf node
-		it.descend_all();
-		// Process all subtree elements until we return to root
-		while (it.node != start.node) {
-			node_depth = ex_ptr_->depth(it);
-			if ( !(it->is_index() || it->is_rational()) ) {
-				node_sets_t &node_sets = map_[*(it->name)];
-				if (node_depth < node_sets.size()) {
-					node_sets[node_depth].erase(it.node);
-				}
-			}
-			++it;
-		}
-	}
-
-	// Clean up a nodemap by removing entries that are no longer needed
-	void Ex_Nodemap::cleanup() {
-		for (auto it = map_.begin(); it != map_.end();) {
-			// Removing unused depths at the end of each node_sets
-			shrink_(it->second);
-			// If the node_sets are now vanishing, we can just delete the key.
-			if (it->second.size() == 0) {
-				it = map_.erase(it);
-			} else {
-				++it;
-			}
-	    }
-	}
-
-	int Ex_Nodemap::used_depth_(node_sets_t& node_sets) const {
-		for (int i=node_sets.size()-1; i>=0; i--) {
-			if (node_sets[i].size() > 0) {
-				return i+1;
-			}
-		}
-		return 0;
-	}
-
-	void Ex_Nodemap::shrink_(node_sets_t& node_sets) {
-		node_sets.resize(used_depth_(node_sets));
-	}
-
-	// Loosely find matches for a pattern using the nodemap
-	Ex_Nodemap::node_sets_t Ex_Nodemap::find_pattern(Ex& pattern) {
-		/* Match the name nodes in a pattern against nodes in the nodemap, 
-		 * ignoring indices (which are not tracked).
-		 *
-		 * The pattern is assumed to be sanitized, meaning that it contains no object
-		 * wildcards or indices, only (at most) name wildcards.
-		 * Moreover, there is at least one valid name somewhere in the pattern tree.
-		 * (i.e. the pattern cannot consist of only name wildcards, since it would
-		 * be impossible to match using our approach.)
-		 * 
-		 * FIXME: Think about this more.
-		 */
-		Ex::iterator start = pattern.begin();
-
-		// Find all the depths at which the pattern starts
-		node_sets_t found_nodes;
-		bool useful_result = false;
-
-		if (!start->is_name_wildcard()) {
-			node_sets_t &node_sets = map_[*(start->name)];
-			for (int depth = 0; depth < node_sets.size(); depth++) {
-				if (node_sets[depth].size() > 0) {
-					if (depth+1 > found_nodes.size()) {
-						found_nodes.resize(depth+1);
-					}
-					useful_result = find_pattern_recursive_(start, depth, found_nodes[depth]);
-				}
-			}
-
-		} else {
-			// start is a wildcard, so we cannot guarantee where depth starts
-			size_t max_depth = 0;
-			// Iterate through the map and find the longest vector length
-			for (const auto& pair : map_) {
-				max_depth = std::max(max_depth, pair.second.size());
-			}
-			found_nodes.resize(max_depth);
-			for (int depth = 0; depth < max_depth; depth++) {
-				useful_result = find_pattern_recursive_(start, depth, found_nodes[depth]);				
-			}
-
-		}
-		assert(useful_result);
-		
-		// Use explicit move of found_nodes
-		// return std::move(found_nodes);
-		return found_nodes;
-	}
-
-	// Match the pattern beginning at given depth, returning true if pattern valid
-	bool Ex_Nodemap::find_pattern_recursive_(Ex::iterator it, int node_depth, node_set_t& node_set) {
-		
-		// Process the current node if it is useful.
-		bool node_useful = !it->is_name_wildcard();
-		if (node_useful) {
-			// Set node_set to all nodes with names it->name at depth=node_depth.
-			// No copying of sets here, so this is very fast.
-			if (map_.find(*(it->name)) != map_.end()) {
-				node_sets_t &node_sets = map_[*(it->name)];
-				if (node_depth < node_sets.size()) {
-					node_set = node_sets[node_depth];
-				}
-			}
-			// If no valid node is found, we can return.
-			if (node_set.empty()) {
-				return true;
-			}
-		}
-
-		// Process all the child nodes.
-
-		// Recursively find the node sets for the children
-		bool some_child_nodes_useful = false;	// at least one valid child node
-		node_set_t parents_of_child_nodes;		// intersection of all parents of valid child nodes
-
-		for (auto child_it = it.begin(); child_it != it.end(); ++child_it ) {
-			node_set_t child_nodes;
-			if (!find_pattern_recursive_(child_it, node_depth+1, child_nodes)) {
-				// If the child node doesn't tell us anything useful, we skip it
-				continue;
-			}
-			// Meaningful child_nodes have been found
-			some_child_nodes_useful = true;
-
-			// map child_nodes to their parent
-			parents_of_child_nodes = map_nodes_to_parents_(child_nodes);
-			
-			if (!node_useful) {
-				// In this case, just assign the parents_of_child_nodes to it.
-				node_set = parents_of_child_nodes;
-			} else {
-				// Compute intersection of node_set with the parents of child nodes
-				node_set_t intersection;
-				std::set_intersection(node_set.begin(), node_set.end(),
-									parents_of_child_nodes.begin(), parents_of_child_nodes.end(),
-									std::inserter(intersection, intersection.begin()));
-				
-				node_set = intersection;			
-			}
-
-			if (node_set.empty()) {
-				return true;
-			}
-
-		}
-
-		// Return true if either the node or its children were useful
-		return node_useful || some_child_nodes_useful;
-	}
-
-	Ex_Nodemap::node_set_t Ex_Nodemap::map_nodes_to_parents_(node_set_t child_nodes) {
-			node_set_t parent_nodes;
-		    std::transform(child_nodes.begin(), child_nodes.end(), 
-                   		   std::inserter(parent_nodes, parent_nodes.end()),
-                 		   [](tree_node_t* node) { return node->parent; });
-			
-			// Eliminate null parent pointers. (This should probably never happen???)
-			parent_nodes.erase(nullptr);
-			// Explicit move
-			// return std::move(parent_nodes);
-			return parent_nodes;
-	}
 
 
 	}

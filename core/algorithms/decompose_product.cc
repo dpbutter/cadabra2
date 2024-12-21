@@ -245,7 +245,8 @@ Algorithm::result_t decompose_product::apply(iterator& it)
 		++ntt;
 	}
 
-	rep.begin()->name=name_set.insert("\\sum").first;
+	// rep.begin()->name=name_set.insert("\\sum").first;
+	tr.rename(rep.begin(), "\\sum");
 
 	it=tr.replace(it, rep.begin());
 

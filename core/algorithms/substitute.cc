@@ -239,7 +239,8 @@ Algorithm::result_t substitute::apply(iterator& st)
 		// match ^{a?}. (though this does match when we write 'i' instead of a?.
 
 		loc=comparator.replacement_map.find(Ex(it));
-		if(loc==comparator.replacement_map.end() && it->is_name_wildcard() && tr.number_of_children(it)!=0) {
+		// if(loc==comparator.replacement_map.end() && it->is_name_wildcard() && tr.number_of_children(it)!=0) {
+		if(loc==comparator.replacement_map.end() && it->is_name_wildcard() && repl.number_of_children(it)!=0) {
 			Ex tmp(it);
 			tmp.erase_children(tmp.begin());
 			loc=comparator.replacement_map.find(tmp);
@@ -267,7 +268,11 @@ Algorithm::result_t substitute::apply(iterator& st)
 			if(is_stripped || (it->is_name_wildcard() && !it->is_index()) ) {
 				// a?_{i j k} type patterns should only replace the head
 				// TODO: should we replace brackets here too?
-				it->name=(*loc).second.begin()->name;
+				// it->name=(*loc).second.begin()->name;
+
+				// FIXME: tr->repl
+				// tr.rename(it, (*loc).second.begin()->name);
+				repl.rename(it, (*loc).second.begin()->name);
 				multiply(it->multiplier, *(*loc).second.begin()->multiplier);
 				it->fl=(*loc).second.begin()->fl;
 				// std::cerr << "replaced: \n" << it << std::endl;
@@ -277,7 +282,10 @@ Algorithm::result_t substitute::apply(iterator& st)
 				// without taking into account the top-level multiplier. So keep the multiplier
 				// of the thing we are replacing.
 				multiplier_t mt=*it->multiplier;
-				it=tr.replace_index(it, (*loc).second.begin()); //, true);
+
+				// FIXME: tr->repl
+				// it=tr.replace_index(it, (*loc).second.begin()); //, true);
+				it=repl.replace_index(it, (*loc).second.begin()); //, true);
 				multiply(it->multiplier, mt);
 				}
 			it->fl.bracket=remember_br;
@@ -290,13 +298,19 @@ Algorithm::result_t substitute::apply(iterator& st)
 		         !=comparator.subtree_replacement_map.end()) { // object wildcards
 			//std::cerr << "srule : " << Ex(it) << std::endl;
 			multiplier_t tmpmult=*it->multiplier; // remember target multiplier
-			iterator tmp= tr.insert_subtree(it, (*sloc).second);
+			
+			// FIXME: Shouldn't the below be repl and not tr?
+			// iterator tmp= tr.insert_subtree(it, (*sloc).second);
+			iterator tmp= repl.insert_subtree(it, (*sloc).second);
 #ifdef DEBUG
 			std::cerr << "subtree replaced: " << repl << std::endl;
 #endif
 			tmp->fl.bracket=it->fl.bracket;
 			tmp->fl.parent_rel=it->fl.parent_rel; // ok?
-			it=tr.erase(it);
+
+			// FIXME: tr->repl			
+			// it=tr.erase(it);
+			it=repl.erase(it);
 			multiply(tmp->multiplier, tmpmult);
 #ifdef DEBUG
 			std::cerr << "subtree replaced 2: " << repl << std::endl;
@@ -340,7 +354,10 @@ Algorithm::result_t substitute::apply(iterator& st)
 			added_dummies.insert(index_map_t::value_type(relabel,(*indit).second));
 			do {
 				// std::cerr << "replace index " << *(indit->second->name) << " with " << *(relabel.begin()->name) << std::endl;
-				tr.replace_index(indit->second,relabel.begin(), true);
+				
+				// FIXME: tr->repl
+				// tr.replace_index(indit->second,relabel.begin(), true);
+				repl.replace_index(indit->second,relabel.begin(), true);
 				++indit;
 				//				txtout << *(indit->first.begin()->name) << " vs " << *(the_key.begin()->name) << std::endl;
 				}

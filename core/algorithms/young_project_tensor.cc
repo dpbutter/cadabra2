@@ -63,7 +63,8 @@ Algorithm::result_t young_project_tensor::apply(iterator& it)
 				dst_fd+=sym.original[j];
 				//			txtout << *src_fd->name  << std::endl;
 				//			txtout << *dst_fd->name  << std::endl;
-				dst_fd->name=src_fd->name;
+				// dst_fd->name=src_fd->name;
+				tr.rename(dst_fd, src_fd->name);
 				}
 			multiply(repfac.begin()->multiplier, sym.signature(i));
 			multiply(repfac.begin()->multiplier, tb->get_tab(kernel.properties, tr, it, 0).projector_normalisation());

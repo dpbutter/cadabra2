@@ -31,7 +31,7 @@ You should have received a copy of the GNU General Public License
 #include <assert.h>
 #include <initializer_list>
 
-#include "tree.hh"
+#include "stree.hh"
 
 namespace cadabra {
 
@@ -118,6 +118,11 @@ namespace cadabra {
 			static bool compare_names_only(const str_node&, const str_node&);
 			static bool compare_name_brack_par(const str_node&, const str_node&);
 			static bool compare_name_inverse_par(const str_node&, const str_node&);
+
+			// Additional functionality
+			bool is_labelled() const;
+			std::string label() const;
+
 		};
 
 	/// \ingroup core
@@ -131,7 +136,7 @@ namespace cadabra {
 	void     half(rset_t::iterator&);
 	void     set(rset_t::iterator&, multiplier_t);
 	
-	class Ex_Nodemap; // Forward declaration of Ex_Nodemap
+	typedef Nodemap<str_node> Ex_Nodemap;
 
 	/// \ingroup core
 	///
@@ -304,13 +309,10 @@ namespace cadabra {
 			/// expression.
 			int  history_size() const;
 
-			// Routines for dealing with the node map
-			void map_on();
-			void map_off();
-			bool is_mapped();
 
-			// Keeping track of all pointers
-			std::unique_ptr<Ex_Nodemap> nodemap;
+			void rename(const iterator_base&, const std::string&);
+			void rename(const iterator_base&, std::string&&);
+			void rename(const iterator_base&, const nset_t::iterator&);
 
 		private:
 			result_t state_;
@@ -321,53 +323,6 @@ namespace cadabra {
 
 		};
 
-
-	/// Ex_Nodemap class for providing a map of an Ex object
-	class Ex_Nodemap {
-		/* 
-		* A nodemap is a dictionary for looking up nodes throughout the Ex tree.
-		* 
-		* Pointers to tree nodes are stored in a map (using the node name as key),
-		* whose value is a vector with index corresponding to the depth of the node
-		* in the tree.
-		* 
-		* For example, the tree   A->B, A->C would be stored as
-		* map['A'] = [set(A_ptr)]
-		* map['B'] = [set(), set(B_ptr)]
-		* map['C'] = [set(), set(C_ptr)]
-		* 
-		* The length of the 'depth vector' is increased when needed.
-		* It is decreased only under a map cleanup routine.
-		*/
-
-		public:
-			typedef tree_node_<str_node>                     tree_node_t;
-			typedef std::set<tree_node_t*>                   node_set_t; 
-			typedef std::vector<node_set_t>                  node_sets_t;
-			typedef std::map<std::string, node_sets_t>       nodemap_t;
-			
-			/// Queued iterator
-			typedef std::deque<tree_node_t*>::iterator		 queued_iterator;
-
-			Ex_Nodemap(Ex* ex_ptr) : ex_ptr_(ex_ptr) {build();}
-			
-			void build();
-			void add_subtree(Ex::iterator);
-			void remove_subtree(Ex::iterator);
-			node_sets_t find_pattern(Ex&);
-			void cleanup();
-			
-		private:
-			nodemap_t   map_;
-			Ex*			ex_ptr_;				// Pointer to the Ex object used by nodemap
-
-			bool find_pattern_recursive_(Ex::iterator, int, node_set_t&);
-			node_set_t map_nodes_to_parents_(node_set_t);
-			int used_depth_(node_sets_t&) const;
-			void shrink_(node_sets_t&);
-
-		};
-	
 
 	/// \ingroup core
 	///

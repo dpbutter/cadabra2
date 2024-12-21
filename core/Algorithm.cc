@@ -40,7 +40,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <sstream>
 
-#define DEBUG
+// #define DEBUG
 
 using namespace cadabra;
 
@@ -188,22 +188,63 @@ Algorithm::result_t Algorithm::apply_generic(Ex::iterator& it, bool deep, bool r
 	return ret;
 	}
 
+
+Algorithm::result_t Algorithm::apply_with_map(bool deep, bool repeat, unsigned int depth)
+	{
+	/* 
+	 * Entry point for applying algorithm exploiting nodemap.
+	 *
+	 * Working approach:
+	 * 1) If the algorithm supports nodemap, query it for the potential target nodes.
+	 * These can be ordered by depth.
+	 * 
+	 * 2) My initial thught: A safe approach to applying would be to work upward by depth, since apply
+	 * only affects lower depths. So we could apply to all nodes at a fixed depth.
+	 * However, this is subtle. Suppose we have A{B{C}}, and are looking for A{B} and B{C}.
+	 * If we match B{C} and then do something to it, e.g. B{C} -> 0, we now have A{0}.
+	 * This no longer matches, but is still a valid node, so we could proceed.
+	 *
+	 * But we still have problems. Suppose we have \prod{A}{B}{C}. And we set \prod{A}{B}->0
+	 * but are looking also for \prod{B}{C} for something. Applying the first rule invalidates
+	 * the node.
+	 * 
+	 * So in order to use a queued apply safely, we would need to update the apply queue whenever
+	 * a node is erased. This is just a more complicated approach as what apply_deep does with
+	 * the post-traversal iterator. Alternatively, we could store the name and depth with
+	 * the node pointer and then verify that the node still exists in the nodemap before application.
+	 * We would do this *prior* to calling can_apply. That seems the simplest approach!
+	 * 
+	 * It could still miss something. A really clever aspect of the post-order iterator is that if we
+	 * raise a tree element, i.e. if B raises a sibling to be a sibling of the parent
+	 *   A       -->     A - C
+	 *  / \
+	 * B   C
+	 * we will still explore C later on. We could still catch this if look for the C node anywhere
+	 * in the nodemap, *or* if we build the queue from the nodemap level-by-level.
+	 * Or we just accept that we won't catch it on the first pass and might need to repeat.
+	 * 
+	 */
+	
+
+	// If tree is unmapped or this algo doesn't use the mapping, just call the usual apply routine.
+	// FIXME: This might be redundant depending on how the algo is called.
+	if !(tr.is_mapped() && this->uses_map()) {
+		return apply_generic(deep, repeat, depth);
+	}
+
+	// Acquire the queue of nodes, this is different for each type
+
+
+
+	}
+
+
 Algorithm::result_t Algorithm::apply_once(Ex::iterator& it)
 	{
 	// std::cerr << "=== apply_once ===" << std::endl;
 	if(traverse_ldots || !tr.is_hidden(it)) {
 		if(can_apply(it)) {
-			// Remove the terms from the nodemap
-			if (tr.is_mapped()) {
-				tr.nodemap->remove_subtree(it);
-			}
-
 			result_t res=apply(it);
-
-			// Add the terms back to the nodemap
-			if (tr.is_mapped()) {
-				tr.nodemap->add_subtree(it);
-			}
 			// std::cerr << "apply algorithm at " << *it->name << std::endl;
 			if(res==result_t::l_applied || res==result_t::l_applied_no_new_dummies) {
 				cleanup_dispatch(kernel, tr, it);
@@ -273,15 +314,7 @@ Algorithm::result_t Algorithm::apply_deep(Ex::iterator& it)
 			post_order_iterator next(current);
 			++next;
 			bool work_is_topnode=(work==it);
-			// Remove the terms from the nodemap
-			if (tr.is_mapped()) {
-				tr.nodemap->remove_subtree(work);
-			}
 			result_t res = apply(work);
-			// Add the terms back to the nodemap
-			if (tr.is_mapped()) {
-				tr.nodemap->add_subtree(work);
-			}
 			if(res==Algorithm::result_t::l_applied || res==Algorithm::result_t::l_applied_no_new_dummies) {
 				some_changes_somewhere=result_t::l_applied;
 				if(res==Algorithm::result_t::l_applied) {
@@ -488,21 +521,24 @@ void Algorithm::node_zero(iterator it)
 	{
 	::zero(it->multiplier);
 	tr.erase_children(it);
-	it->name=name_set.insert("1").first;
+	// it->name=name_set.insert("1").first;
+	tr.rename(it, "1");
 	}
 
 void Algorithm::node_one(iterator it)
 	{
 	::one(it->multiplier);
 	tr.erase_children(it);
-	it->name=name_set.insert("1").first;
+	// it->name=name_set.insert("1").first;
+	tr.rename(it, "1");
 	}
 
 void Algorithm::node_integer(iterator it, int num)
 	{
 	::one(it->multiplier);
 	tr.erase_children(it);
-	it->name=name_set.insert("1").first;
+	// it->name=name_set.insert("1").first;
+	tr.rename(it, "1");
 	::multiply(it->multiplier, num);
 	}
 

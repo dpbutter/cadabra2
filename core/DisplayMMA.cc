@@ -633,7 +633,8 @@ void DisplayMMA::import(Ex& ex)
 			{
 			// If we have converted the name of this symbol, convert back.
 			if(m.second==*it->name) {
-				it->name=name_set.insert(m.first).first;
+				// it->name=name_set.insert(m.first).first;
+				ex.rename(it, m.first);
 				break;
 				}
 			}

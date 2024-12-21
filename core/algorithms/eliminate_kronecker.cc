@@ -128,7 +128,8 @@ Algorithm::result_t eliminate_kronecker::apply(iterator& st)
 	//	txtout << *st->name << " " << *(tr.parent(st)->name) << std::endl;
 	sibling_iterator ff=tr.begin(st);
 	if(ff==tr.end(st)) {
-		st->name=onept;
+		// st->name=onept;
+		tr.rename(st, onept);
 		}
 	else {
 		++ff;

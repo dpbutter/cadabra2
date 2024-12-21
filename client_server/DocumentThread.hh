@@ -8,7 +8,7 @@
 #include <thread>
 
 #include "DataCell.hh"
-#include "tree.hh"
+#include "stree.hh"
 
 namespace cadabra {
 

@@ -16,9 +16,8 @@
 #include <cstddef>
 #include <string>
 #include <map>
-#include <sstream>
 
-template <class T, class tree_node_allocator = std::allocator<tree_node_<T>>>
+template <class T, class tree_node_allocator>
 class Nodemap;
 
 /// A node in the tree, combining links to other nodes as well as the actual data.
@@ -33,13 +32,14 @@ class tree_node_ { // size: 5*4=20 bytes (on 32 bit arch), can be reduced by 8.
 	   tree_node_<T> *first_child, *last_child;
 		tree_node_<T> *prev_sibling, *next_sibling;
 		T data;
-
+		
 		bool is_labelled() const {
 			return data.is_labelled();
 		}
 		std::string label() const {
 			return data.label();
 		}
+
 }; 
 
 template<class T>
@@ -444,7 +444,6 @@ class tree {
 		/// Check if tree is empty.
 		bool     empty() const;
 		/// Compute the depth to the root or to a fixed other iterator.
-		static int depth(const tree_node*);
 		static int depth(const iterator_base&);
 		static int depth(const iterator_base&, const iterator_base&);
 		/// Compute the depth to the root, counting all levels for which predicate returns true.
@@ -501,15 +500,8 @@ class tree {
         std::unique_ptr<Nodemap<T, tree_node_allocator>> nodemap;
         void map_on();
         void map_off();
-        bool is_mapped() const;
-		bool is_mapped(const tree_node*) const;
-		bool is_mapped(const iterator_base&) const;
+        bool is_mapped();
 
-		std::string print_nodemap() const {
-			if (is_mapped()) return nodemap->print();
-			else 			 return "Expression is unmapped.\n";
-		}
-		
 	private:
 		tree_node_allocator alloc_;
 		void head_initialise_();
@@ -706,12 +698,12 @@ void tree<T, tree_node_allocator>::erase_children(const iterator_base& it)
 	if(it.node==0) return;
 	tree_node *cur=it.node->first_child;
 	tree_node *prev=0;
-
+	
 	while(cur!=0) {
 		prev=cur;
 		cur=cur->next_sibling;
 		erase_children(pre_order_iterator(prev));
-		if (is_mapped()) nodemap->unmap_node(prev);
+		if (is_mapped()) nodemap->unmap_node(prev, depth(it));
 		std::allocator_traits<decltype(alloc_)>::destroy(alloc_, prev);
 		std::allocator_traits<decltype(alloc_)>::deallocate(alloc_, prev, 1);
 		}
@@ -732,7 +724,7 @@ void tree<T, tree_node_allocator>::erase_right_siblings(const iterator_base& it)
 		prev=cur;
 		cur=cur->next_sibling;
 		erase_children(pre_order_iterator(prev));
-		if (is_mapped()) nodemap->unmap_node(prev);
+		if (is_mapped()) nodemap->unmap_node(prev, depth(it));
 		std::allocator_traits<decltype(alloc_)>::destroy(alloc_, prev);
 		std::allocator_traits<decltype(alloc_)>::deallocate(alloc_, prev, 1);
 		}
@@ -753,7 +745,7 @@ void tree<T, tree_node_allocator>::erase_left_siblings(const iterator_base& it)
 		prev=cur;
 		cur=cur->prev_sibling;
 		erase_children(pre_order_iterator(prev));
-		if (is_mapped()) nodemap->unmap_node(prev);
+		if (is_mapped()) nodemap->unmap_node(prev, depth(it));
 		std::allocator_traits<decltype(alloc_)>::destroy(alloc_, prev);
 		std::allocator_traits<decltype(alloc_)>::deallocate(alloc_, prev, 1);
 		}
@@ -787,7 +779,7 @@ iter tree<T, tree_node_allocator>::erase(iter it)
 		cur->next_sibling->prev_sibling=cur->prev_sibling;
 		}
 
-	if (is_mapped()) nodemap->unmap_node(cur);
+	if (is_mapped()) nodemap->unmap_node(cur, depth(it));
 	std::allocator_traits<decltype(alloc_)>::destroy(alloc_, cur);
 	std::allocator_traits<decltype(alloc_)>::deallocate(alloc_, cur, 1);
 	return ret;
@@ -1084,8 +1076,8 @@ iter tree<T, tree_node_allocator>::append_child(iter position)
 	position.node->last_child=tmp;
 	tmp->next_sibling=0;
 
-	// Don't need to map it because it's empty, but do anyway
-	if (is_mapped()) nodemap->map_node(tmp);
+	// Don't need to map it because it's empty.
+	// if (is_mapped()) nodemap->map_node(tmp, depth(position)+1);
 	return tmp;
  	}
 
@@ -1113,8 +1105,8 @@ iter tree<T, tree_node_allocator>::prepend_child(iter position)
 	position.node->prev_child=tmp;
 	tmp->prev_sibling=0;
 
-	// Don't need to map it because it's empty, but do anyway
-	if (is_mapped()) nodemap->map_node(tmp);
+	// Don't need to map it because it's empty.
+	// if (is_mapped()) nodemap->map_node(tmp, depth(position)+1);
 	return tmp;
  	}
 
@@ -1146,7 +1138,7 @@ iter tree<T, tree_node_allocator>::append_child(iter position, const T& x)
 	position.node->last_child=tmp;
 	tmp->next_sibling=0;
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position)+1);
 	return tmp;
 	}
 
@@ -1176,7 +1168,7 @@ iter tree<T, tree_node_allocator>::append_child(iter position, T&& x)
 	position.node->last_child=tmp;
 	tmp->next_sibling=0;
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position)+1);
 	return tmp;
 	}
 
@@ -1204,7 +1196,7 @@ iter tree<T, tree_node_allocator>::prepend_child(iter position, const T& x)
 	position.node->first_child=tmp;
 	tmp->prev_sibling=0;
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position)+1);
 	return tmp;
 	}
 
@@ -1234,7 +1226,7 @@ iter tree<T, tree_node_allocator>::prepend_child(iter position, T&& x)
 	position.node->first_child=tmp;
 	tmp->prev_sibling=0;
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position)+1);
 	return tmp;
 	}
 
@@ -1313,6 +1305,7 @@ typename tree<T, tree_node_allocator>::pre_order_iterator tree<T, tree_node_allo
 	return insert(iterator(feet), x);
 	}
 
+// FIXED
 template <class T, class tree_node_allocator>
 template <class iter>
 iter tree<T, tree_node_allocator>::insert(iter position, const T& x)
@@ -1340,10 +1333,11 @@ iter tree<T, tree_node_allocator>::insert(iter position, const T& x)
 	else
 		tmp->prev_sibling->next_sibling=tmp;
 	
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position));
 	return tmp;
 	}
 
+// FIXED
 template <class T, class tree_node_allocator>
 template <class iter>
 iter tree<T, tree_node_allocator>::insert(iter position, T&& x)
@@ -1370,10 +1364,11 @@ iter tree<T, tree_node_allocator>::insert(iter position, T&& x)
 	else
 		tmp->prev_sibling->next_sibling=tmp;
 	
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position));
 	return tmp;
 	}
 
+// FIXED
 template <class T, class tree_node_allocator>
 typename tree<T, tree_node_allocator>::sibling_iterator tree<T, tree_node_allocator>::insert(sibling_iterator position, const T& x)
 	{
@@ -1401,10 +1396,11 @@ typename tree<T, tree_node_allocator>::sibling_iterator tree<T, tree_node_alloca
 	else
 		tmp->prev_sibling->next_sibling=tmp;
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position));
 	return tmp;
 	}
 
+// FIXED
 template <class T, class tree_node_allocator>
 typename tree<T, tree_node_allocator>::sibling_iterator tree<T, tree_node_allocator>::insert(sibling_iterator position, T&& x)
 	{
@@ -1434,10 +1430,11 @@ typename tree<T, tree_node_allocator>::sibling_iterator tree<T, tree_node_alloca
 	else
 		tmp->prev_sibling->next_sibling=tmp;
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position));
 	return tmp;
 	}
 
+// FIXED
 template <class T, class tree_node_allocator>
 template <class iter>
 iter tree<T, tree_node_allocator>::insert_after(iter position, const T& x)
@@ -1460,10 +1457,11 @@ iter tree<T, tree_node_allocator>::insert_after(iter position, const T& x)
 		tmp->next_sibling->prev_sibling=tmp;
 		}
 
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position));
 	return tmp;
 	}
 
+// FIXED
 template <class T, class tree_node_allocator>
 template <class iter>
 iter tree<T, tree_node_allocator>::insert_after(iter position, T&& x)
@@ -1487,9 +1485,10 @@ iter tree<T, tree_node_allocator>::insert_after(iter position, T&& x)
 		tmp->next_sibling->prev_sibling=tmp;
 		}
 	
-	if (is_mapped()) nodemap->map_node(tmp);
+	if (is_mapped()) nodemap->map_node(tmp, depth(position));
 	return tmp;
 	}
+
 
 template <class T, class tree_node_allocator>
 template <class iter>
@@ -1527,13 +1526,12 @@ iter tree<T, tree_node_allocator>::replace(iter position, const T& x)
 	{
 //	kp::destructor(&position.node->data);
 //	kp::constructor(&position.node->data, x);
-	if (is_mapped()) {
-		nodemap->unmap_node(position.node);
-		position.node->data=x;
-		nodemap->map_node(position.node);
-	} else {
-		position.node->data=x;
-	}
+	
+	/* FIXME: IS THIS THE ONLY PLACE WHERE A NODE IS ALTERED WITHOUT
+	          EXPLICITLY CALLING A CONSTRUCTOR/DESTRUCTOR? */
+	if (is_mapped()) nodemap->unmap_node(position.node, depth(position));
+	position.node->data=x;
+	if (is_mapped()) nodemap->map_node(position.node, depth(position));
 //	alloc_.destroy(position.node);
 //	alloc_.construct(position.node, x);
 	return position;
@@ -1574,7 +1572,7 @@ iter tree<T, tree_node_allocator>::replace(iter position, const iterator_base& f
 	tmp->next_sibling=current_to->next_sibling;
 	tmp->parent=current_to->parent;
 //	kp::destructor(&current_to->data);
-	if (is_mapped()) nodemap->unmap_node(current_to);
+	if (is_mapped()) nodemap->unmap_node(current_to, depth(position));
 	std::allocator_traits<decltype(alloc_)>::destroy(alloc_, current_to);
 	std::allocator_traits<decltype(alloc_)>::deallocate(alloc_, current_to, 1);
 	current_to=tmp;
@@ -1604,8 +1602,7 @@ iter tree<T, tree_node_allocator>::replace(iter position, const iterator_base& f
 		}
 	while(current_from!=last);
 
-	// map only current_to node. Its children are handled by append_child.
-	if (is_mapped()) nodemap->map_node(current_to);
+	if (is_mapped()) nodemap->map_node(current_to, depth(position));
 	return current_to;
 	}
 
@@ -1663,9 +1660,7 @@ iter tree<T, tree_node_allocator>::flatten(iter position)
 
 	tree_node *tmp=position.node->first_child;
 	while(tmp) {
-		if (is_mapped()) nodemap->unmap_subtree(tmp);
 		tmp->parent=position.node->parent;
-		if (is_mapped()) nodemap->map_subtree(tmp);
 		tmp=tmp->next_sibling;
 		} 
 	if(position.node->next_sibling) {
@@ -1693,16 +1688,11 @@ iter tree<T, tree_node_allocator>::reparent(iter position, sibling_iterator begi
 
 	assert(first!=position.node);
 	
-	// Unmap begin..end while searching for last node
 	if(begin==end) return begin;
 	// determine last node
-	if (is_mapped()) nodemap->unmap_subtree(begin);
 	while((++begin)!=end) {
-		if (is_mapped()) nodemap->unmap_subtree(begin);
 		last=last->next_sibling;
 		}
-	// Note: end is not unmapped, b/c end is not moved, i.e. range is [begin, end) 
-
 	// move subtree
 	if(first->prev_sibling==0) {
 		first->parent->first_child=last->next_sibling;
@@ -1731,7 +1721,6 @@ iter tree<T, tree_node_allocator>::reparent(iter position, sibling_iterator begi
 	tree_node *pos=first;
    for(;;) {
 		pos->parent=position.node;
-		if (is_mapped()) nodemap->map_subtree(pos);
 		if(pos==last) break;
 		pos=pos->next_sibling;
 		}
@@ -1780,7 +1769,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_after(iter targ
 			return source;
 
    // take src out of the tree
-   if (is_mapped()) nodemap->unmap_subtree(source);
    if(src->prev_sibling!=0) src->prev_sibling->next_sibling=src->next_sibling;
    else                     src->parent->first_child=src->next_sibling;
    if(src->next_sibling!=0) src->next_sibling->prev_sibling=src->prev_sibling;
@@ -1793,8 +1781,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_after(iter targ
    dst->next_sibling=src;
    src->prev_sibling=dst;
    src->parent=dst->parent;
-   if (is_mapped()) nodemap->map_subtree(source);
-
    return src;
    }
 
@@ -1812,7 +1798,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_before(iter tar
 			return source;
 
    // take src out of the tree
-   if (is_mapped()) nodemap->unmap_subtree(source);
    if(src->prev_sibling!=0) src->prev_sibling->next_sibling=src->next_sibling;
    else                     src->parent->first_child=src->next_sibling;
    if(src->next_sibling!=0) src->next_sibling->prev_sibling=src->prev_sibling;
@@ -1825,8 +1810,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_before(iter tar
    dst->prev_sibling=src;
    src->next_sibling=dst;
    src->parent=dst->parent;
-   if (is_mapped()) nodemap->map_subtree(source);
-
    return src;
    }
 
@@ -1851,7 +1834,6 @@ typename tree<T, tree_node_allocator>::sibling_iterator tree<T, tree_node_alloca
 			return source;
 
 	// take src out of the tree
-	if (is_mapped()) nodemap->unmap_subtree(source);
 	if(src->prev_sibling!=0) src->prev_sibling->next_sibling=src->next_sibling;
 	else                     src->parent->first_child=src->next_sibling;
 	if(src->next_sibling!=0) src->next_sibling->prev_sibling=src->prev_sibling;
@@ -1869,8 +1851,6 @@ typename tree<T, tree_node_allocator>::sibling_iterator tree<T, tree_node_alloca
 		src->parent=dst_prev_sibling->parent;
 		}
 	src->next_sibling=dst;
-	if (is_mapped()) nodemap->map_subtree(source);
-
 	return src;
 	}
 
@@ -1897,7 +1877,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_ontop(iter targ
 	erase(target);
 
 	// take src out of the tree
-	if (is_mapped()) nodemap->unmap_subtree(source);
 	if(src->prev_sibling!=0) src->prev_sibling->next_sibling=src->next_sibling;
 	else {
 		assert(src->parent!=0);
@@ -1923,8 +1902,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_ontop(iter targ
 	src->prev_sibling=b_prev_sibling;
 	src->next_sibling=b_next_sibling;
 	src->parent=b_parent;
-	if (is_mapped()) nodemap->map_subtree(source);
-
 	return src;
 	}
 
@@ -1932,8 +1909,6 @@ template <typename iter> iter tree<T, tree_node_allocator>::move_ontop(iter targ
 template <class T, class tree_node_allocator>
 tree<T, tree_node_allocator> tree<T, tree_node_allocator>::move_out(iterator source)
 	{
-	if (is_mapped()) nodemap->unmap_subtree(source);
-
 	tree ret;
 
 	// Move source node into the 'ret' tree.
@@ -1999,7 +1974,6 @@ template<typename iter> iter tree<T, tree_node_allocator>::move_in(iter loc, tre
 	other.head->next_sibling=other.feet;
 	other.feet->prev_sibling=other.head;
 
-	if (is_mapped()) nodemap->map_subtree(other_first_head);
 	return other_first_head;
 	}
 
@@ -2067,7 +2041,6 @@ template<typename iter> iter tree<T, tree_node_allocator>::move_in_as_nth_child(
 	other.head->next_sibling=other.feet;
 	other.feet->prev_sibling=other.head;
 
-	if (is_mapped()) nodemap->map_subtree(other_first_head);
 	return other_first_head;
 	}
 
@@ -2121,8 +2094,6 @@ template <class StrictWeakOrdering>
 void tree<T, tree_node_allocator>::sort(sibling_iterator from, sibling_iterator to, 
 													 StrictWeakOrdering comp, bool deep)
 	{
-	// no update to map b/c sort only rearranges nodes at a fixed depth
-
 	if(from==to) return;
 	// make list of sorted nodes
 	// CHECK: if multiset stores equivalent nodes in the order in which they
@@ -2278,18 +2249,6 @@ bool tree<T, tree_node_allocator>::empty() const
 	}
 
 template <class T, class tree_node_allocator>
-int tree<T, tree_node_allocator>::depth(const tree_node* pos) 
-	{
-	assert(pos!=0);
-	int ret=0;
-	while(pos->parent!=0) {
-		pos=pos->parent;
-		++ret;
-		}
-	return ret;
-	}
-
-template <class T, class tree_node_allocator>
 int tree<T, tree_node_allocator>::depth(const iterator_base& it) 
 	{
 	tree_node* pos=it.node;
@@ -2428,7 +2387,6 @@ unsigned int tree<T, tree_node_allocator>::number_of_siblings(const iterator_bas
 template <class T, class tree_node_allocator>
 void tree<T, tree_node_allocator>::swap(sibling_iterator it)
 	{
-	// swapping siblings has no effect on nodemap
 	tree_node *nxt=it.node->next_sibling;
 	if(nxt) {
 		if(it.node->prev_sibling)
@@ -2454,13 +2412,6 @@ void tree<T, tree_node_allocator>::swap(iterator one, iterator two)
 	if(one.node->next_sibling==two.node) swap(one);
 	else if(two.node->next_sibling==one.node) swap(two);
 	else {
-		// Remap one and two only if at different depths
-		bool remap_them = is_mapped() && (depth(one) != depth(two));
-		if (remap_them) {
-			nodemap->unmap_subtree(one);
-			nodemap->unmap_subtree(two);
-		}
-
 		tree_node *nxt1=one.node->next_sibling;
 		tree_node *nxt2=two.node->next_sibling;
 		tree_node *pre1=one.node->prev_sibling;
@@ -2484,12 +2435,6 @@ void tree<T, tree_node_allocator>::swap(iterator one, iterator two)
 		two.node->prev_sibling=pre1;
 		if(pre1) pre1->next_sibling=two.node;
 		else     par1->first_child=two.node;
-
-		// Remap one and two
-		if (remap_them) {
-			nodemap->map_subtree(one);
-			nodemap->map_subtree(two);
-		}
 		}
 	}
 
@@ -2627,13 +2572,6 @@ void tree<T, tree_node_allocator>::debug_verify_consistency() const
 			}
 		++it;
 		}
-	if (is_mapped()) {
-		nodemap->cleanup();
-		Nodemap<T, tree_node_allocator> backup = nodemap;
-		nodemap->build();
-		assert(nodemap == backup);
-	}
-
 	}
 
 template <class T, class tree_node_allocator>
@@ -3520,43 +3458,8 @@ typename tree<T, tree_node_allocator>::leaf_iterator& tree<T, tree_node_allocato
    }
 
 
-
-
-template <class T, class tree_node_allocator>
-void tree<T, tree_node_allocator>::map_on()
-    {
-    // The Nodemap is owned uniquely by this pointer.
-    this->nodemap = std::make_unique<Nodemap<T, tree_node_allocator>>(this);
-    }
-
-template <class T, class tree_node_allocator>
-void tree<T, tree_node_allocator>::map_off()
-    {
-    // Turn off the map and free the memory
-    this->nodemap.reset();
-    }
-
-template <class T, class tree_node_allocator>
-bool tree<T, tree_node_allocator>::is_mapped() const
-    {
-    return this->nodemap != nullptr;
-    }
-
-template <class T, class tree_node_allocator>
-bool tree<T, tree_node_allocator>::is_mapped(const iterator_base& it) const
-    {
-    return this->nodemap != nullptr && it->is_labelled();
-    }
-
-template <class T, class tree_node_allocator>
-bool tree<T, tree_node_allocator>::is_mapped(const tree_node* node) const
-    {
-    return this->nodemap != nullptr && node->is_labelled();
-    }
-
-
 /// Nodemap class for providing a map of a tree object
-template <class T, class tree_node_allocator = std::allocator<tree_node_<T>>>
+template <class T, class tree_node_allocator>
 class Nodemap {
     /* 
     * A nodemap is a dictionary for looking up nodes throughout the tree.
@@ -3585,63 +3488,15 @@ class Nodemap {
         typedef typename std::deque<tree_node_t*>::iterator		              queued_iterator;
 
         Nodemap(tree<T,tree_node_allocator>* tr_ptr) : tr_ptr_(tr_ptr) {build();}
-
+        
         void build();
-        void map_node(tree_node_t*);
-        void unmap_node(tree_node_t*);
-        void map_node(const iterator&);
-        void unmap_node(const iterator&);
-        void map_subtree(const iterator&);
-        void unmap_subtree(const iterator&);
+        void map_subtree(iterator&);
+        void unmap_subtree(iterator&);
+        void map_node(tree_node_t*, int);
+        void unmap_node(tree_node_t*, int);
         node_sets_t find_pattern(tree<T,tree_node_allocator>&);
         void cleanup();
-		std::string print() const;
-
         
-		bool operator==(Nodemap<T, tree_node_allocator>&) const;
-		bool operator!=(Nodemap<T, tree_node_allocator>&) const;
-
-
-		class queued_iterator {
-			public:
-				typedef T                               value_type;
-				typedef T*                              pointer;
-				typedef T&                              reference;
-				typedef size_t                          size_type;
-				typedef ptrdiff_t                       difference_type;
-
-				queued_iterator(node_sets_t);
-
-				T&             operator*() const;
-				T*             operator->() const;
-
-				bool    operator==(const pre_order_iterator&) const;
-				bool    operator!=(const pre_order_iterator&) const;
-				queued_iterator&  operator++();
-			    queued_iterator&  operator--();
-				// queued_iterator   operator++(int);
-				// queued_iterator   operator--(int);
-				// queued_iterator&  operator+=(unsigned int);
-				// queued_iterator&  operator-=(unsigned int);
-
-				void set_depth(int);
-				/*
-            	/// When called, the next increment/decrement skips children of this node.
-				void         skip_children();
-				void         skip_children(bool skip);
-				/// Number of children of the node pointed to by the iterator.
-				unsigned int number_of_children() const;
-
-				sibling_iterator begin() const;
-				sibling_iterator end() const;
-				*/
-
-				tree_node_t *node;
-			private:
-				node_set_t queue_;
-				Nodemap* nodemap;
-		}
-
     private:
         nodemap_t   map_;
         tree<T,tree_node_allocator>*			tr_ptr_;				// Pointer to the tree object used by nodemap
@@ -3655,6 +3510,27 @@ class Nodemap {
 
 
 
+
+template <class T, class tree_node_allocator>
+void tree<T, tree_node_allocator>::map_on()
+    {
+    // The Nodemap is owned uniquely by this pointer.
+    this->nodemap = std::make_unique<Nodemap<T, tree_node_allocator>>(this);
+    }
+
+template <class T, class tree_node_allocator>
+void tree<T, tree_node_allocator>::map_off()
+    {
+    // Turn off the map and free the memory
+    this->nodemap.reset();
+    }
+
+template <class T, class tree_node_allocator>
+bool tree<T, tree_node_allocator>::is_mapped()
+    {
+    return this->nodemap != nullptr;
+    }
+
 // Builds (or rebuilds) a node map
 template <class T, class tree_node_allocator>
 void Nodemap<T, tree_node_allocator>::build() 
@@ -3667,69 +3543,57 @@ void Nodemap<T, tree_node_allocator>::build()
 
 // Add a node to the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_node(tree_node_t* node) {
+void Nodemap<T, tree_node_allocator>::map_node(tree_node_t* node, int node_depth) {
     if ( node->is_labelled() ) {
-		int node_depth = tr_ptr_->depth(node);
         node_sets_t &node_sets = map_[node->label()];
-        if (static_cast<int>(node_sets.size()) < node_depth+1) {
+        if (node_sets.size() < node_depth+1) {
             node_sets.resize(node_depth+1);
         }
         node_sets[node_depth].insert(node);
     }
 }
-template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_node(const iterator& it) {
-	map_node(it.node);
-}
-
 
 // Add a subtree to the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_subtree(const iterator& start) {
+void Nodemap<T, tree_node_allocator>::map_subtree(iterator& start) {
     // start begins at root node of the subtree
     typename tree<T, tree_node_allocator>::post_order_iterator it = start;
     // Add subtree root to node map
-    map_node(it.node);
+    map_node(it.node, tr_ptr_->depth(it));
     // push post_order iterator all the way to the first leaf node
     it.descend_all();
     // Process all subtree elements until we return to root
     while (it.node != start.node) {
-	    map_node(it.node);
+	    map_node(*it, tr_ptr_->depth(it));
 	    ++it;
     }
 }
 
 // Remove a node from the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::unmap_node(tree_node_t* node) {
+void Nodemap<T, tree_node_allocator>::unmap_node(tree_node_t* node, int node_depth) {
     if ( node->is_labelled() ) {
-		int node_depth = tr_ptr_->depth(node);
         node_sets_t &node_sets = map_[node->label()];
-		// We cannot guarantee that unmap_node won't be called on a node from another tree.
-		// e.g. move_ontop is often called with the iterator from another tree
-        if (node_depth < static_cast<int>(node_sets.size())) {
+		// FIXME: Maybe have it throw an exception if the node not found
+        if (node_depth < node_sets.size()) {
             node_sets[node_depth].erase(node);
         }
     }
 }
-template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::unmap_node(const iterator& it) {
-	unmap_node(it.node);
-}
 
 // Remove a subtree from the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::unmap_subtree(const iterator& start) {
+void Nodemap<T, tree_node_allocator>::unmap_subtree(iterator& start) {
     // start begins at root node of the subtree
     typename tree<T, tree_node_allocator>::post_order_iterator it = start;
 
     // Remove subtree root from node map
-	unmap_node(it.node);
+	unmap_node(*it, tr_ptr_->depth(it));
     // push post_order iterator all the way to the first leaf node
     it.descend_all();
     // Process all subtree elements until we return to root
     while (it.node != start.node) {
-		unmap_node(it.node);
+		unmap_node(*it, tr_ptr_->depth(it));
         ++it;
     }
 }
@@ -3751,7 +3615,7 @@ void Nodemap<T, tree_node_allocator>::cleanup() {
 
 template <class T, class tree_node_allocator>
 int Nodemap<T, tree_node_allocator>::used_depth_(node_sets_t& node_sets) const {
-    for (int i=static_cast<int>(node_sets.size())-1; i>=0; i--) {
+    for (int i=node_sets.size()-1; i>=0; i--) {
         if (node_sets[i].size() > 0) {
             return i+1;
         }
@@ -3786,9 +3650,9 @@ typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_alloc
 
     if ( start->is_labelled() ) {
         node_sets_t &node_sets = map_[start->label()];
-        for (int depth = 0; depth < static_cast<int>(node_sets.size()); depth++) {
+        for (int depth = 0; depth < node_sets.size(); depth++) {
             if (node_sets[depth].size() > 0) {
-                if (depth+1 > static_cast<int>(found_nodes.size())) {
+                if (depth+1 > found_nodes.size()) {
                     found_nodes.resize(depth+1);
                 }
                 useful_result = find_pattern_recursive_(start, depth, found_nodes[depth]);
@@ -3826,7 +3690,7 @@ bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(iterator it, int n
         // No copying of sets here, so this is very fast.
         if (map_.find(it->label()) != map_.end()) {
             node_sets_t &node_sets = map_[it->label()];
-            if (node_depth < static_cast<int>(node_sets.size())) {
+            if (node_depth < node_sets.size()) {
                 node_set = node_sets[node_depth];
             }
         }
@@ -3891,36 +3755,6 @@ typename Nodemap<T, tree_node_allocator>::node_set_t Nodemap<T, tree_node_alloca
         return parent_nodes;
 }
 
-template <class T, class tree_node_allocator>
-std::string Nodemap<T, tree_node_allocator>::print() const {
-    std::ostringstream output;
-    // Iterate through the map
-    for (const auto& entry : map_) {
-        // Add the key
-        const std::string& key = entry.first;
-        const node_sets_t& node_sets = entry.second;
-        output << "'" << key << "'" << "\n";
-
-        // Iterate through the vector
-        for (size_t i = 0; i < node_sets.size(); ++i) {
-            const node_set_t& node_set = node_sets[i];
-            output << "  " << i << " : " << node_set.size() << "\n";
-        }
-    }
-
-    // Return the constructed string
-    return output.str();
-}
-
-template <class T, class tree_node_allocator>
-bool Nodemap<T, tree_node_allocator>::operator==(Nodemap<T, tree_node_allocator>& other) const {
-	return this->map_ == other.map;
-}
-
-template <class T, class tree_node_allocator>
-bool Nodemap<T, tree_node_allocator>::operator!=(Nodemap<T, tree_node_allocator>& other) const {
-	return !(this->map_ == other.map);
-}
 
 #endif
 

@@ -30,7 +30,8 @@ Algorithm::result_t reduce_delta::apply(iterator& st)
 		++num;
 		res=result_t::l_applied;
 		if(tr.number_of_children(st)==0) {
-			st->name=name_set.insert("1").first;
+			// st->name=name_set.insert("1").first;
+			tr.rename(st, "1");
 			break;
 			}
 		};
@@ -87,7 +88,7 @@ found:
 	++up2;
 	++up2;
 	while(up2!=tr.end(dl)) {
-		up->name=up2->name;
+		up->name=up2->name;		// allowed for index
 		up->multiplier=up2->multiplier;
 		++up;
 		++up;
@@ -98,7 +99,7 @@ found:
 	++dn2;
 	++dn2;
 	while(dn2!=tr.end(dl)) {
-		dn->name=dn2->name;
+		dn->name=dn2->name;		// allowed for index
 		dn->multiplier=dn2->multiplier;
 		++dn;
 		++dn;

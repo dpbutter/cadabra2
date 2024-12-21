@@ -101,7 +101,8 @@ Algorithm::result_t product_rule::apply(iterator& it)
 		sibling_iterator ar=tr.begin(prodnode);
 		sibling_iterator pw=ar;
 		++pw;
-		sm->name=name_set.insert("\\prod").first;
+		// sm->name=name_set.insert("\\prod").first;
+		tr.rename(sm, "\\prod");
 		if(pw->is_integer())
 			multiply(sm->multiplier, *pw->multiplier);
 		else rep.append_child(sm, (iterator)pw);

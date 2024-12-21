@@ -216,7 +216,8 @@ Algorithm::result_t expand::apply(iterator& it)
 		else ++sib;
 		}
 
-	it->name=name_set.insert("\\prod").first;
+	// it->name=name_set.insert("\\prod").first;
+	tr.rename(it, "\\prod");
 	cleanup_dispatch(kernel, tr, it);
 
 	return result_t::l_applied;

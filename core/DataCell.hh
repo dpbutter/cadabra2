@@ -4,7 +4,7 @@
 #include <string>
 #include <mutex>
 
-#include "tree.hh"
+#include "stree.hh"
 #include "nlohmann/json.hpp"
 
 namespace cadabra {
@@ -101,6 +101,13 @@ namespace cadabra {
 			bool                          running;
 
 			id_t                          id() const;
+
+			bool is_labelled() const {
+				return false;
+			}
+			std::string label() const {
+				return "";
+			}
 
 		private:
 			id_t                          serial_number;

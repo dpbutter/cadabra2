@@ -22,7 +22,7 @@ namespace cadabra {
 		return cleanup_dispatch_deep(k, tr, &pre_clean_dispatch);
 		}
 
-	void cleanup_updown(const Kernel&, Ex&, Ex::iterator& st)
+	void cleanup_updown(const Kernel&, Ex& tr, Ex::iterator& st)
 		{
 		std::string rn=*st->name;
 		bool isup=true;
@@ -35,14 +35,16 @@ namespace cadabra {
 		//	st=tr.erase(st);
 		if(isup) st->fl.parent_rel=str_node::p_super;
 		else     st->fl.parent_rel=str_node::p_sub;
-		st->name=name_set.insert(rn).first;
+		// st->name=name_set.insert(rn).first;
+		tr.rename(st, rn);
 		}
 
-	void cleanup_rational(const Kernel&, Ex&, Ex::iterator& st)
+	void cleanup_rational(const Kernel&, Ex& tr, Ex::iterator& st)
 		{
 		multiplier_t num(*st->name);
 		num.canonicalize();
-		st->name=name_set.insert("1").first;
+		// st->name=name_set.insert("1").first;
+		tr.rename(st, "1");
 		multiply(st->multiplier,num);
 		}
 
@@ -65,7 +67,8 @@ namespace cadabra {
 			multiply( tr.append_child(sib, str_node("1"))->multiplier, -1 );
 			++sib;
 			}
-		st->name=name_set.insert("\\prod").first;
+		// st->name=name_set.insert("\\prod").first;
+		tr.rename(st, "\\prod");
 
 
 		//	assert(tr.number_of_children(st)>1);
@@ -115,7 +118,8 @@ namespace cadabra {
 
 	void cleanup_sqrt(const Kernel&, Ex& tr, Ex::iterator& st)
 		{
-		st->name=name_set.insert("\\pow").first;
+		// st->name=name_set.insert("\\pow").first;
+		tr.rename(st, "\\pow");
 		multiply(tr.append_child(st, str_node("1"))->multiplier, multiplier_t(1)/2);
 		}
 
@@ -133,7 +137,8 @@ namespace cadabra {
 		{
 		assert(tr.number_of_children(it)>1); // To guarantee that we have really cleaned up that old stuff.
 
-		it->name=name_set.insert("\\sum").first;
+		// it->name=name_set.insert("\\sum").first;
+		tr.rename(it, "\\sum");
 		Ex::sibling_iterator sit=tr.begin(it);
 
 		// Make sure that all terms have the right sign, and zeroes are removed.
@@ -152,7 +157,8 @@ namespace cadabra {
 		// Single-term situation: remove the \sum.
 		if(tr.number_of_children(it)==0) {
 			zero(it->multiplier);
-			it->name=name_set.insert("1").first;
+			// it->name=name_set.insert("1").first;
+			tr.rename(it, "1");
 			}
 		else {
 			if(tr.number_of_children(it)==1) {
@@ -174,7 +180,8 @@ namespace cadabra {
 				++sib;
 				while(sib!=tr.end(it)) {
 					if(sib->fl.parent_rel==str_node::p_super || sib->fl.parent_rel==str_node::p_sub) {
-						it->name=name_set.insert("\\indexbracket").first;
+						// it->name=name_set.insert("\\indexbracket").first;
+						tr.rename(it, "\\indexbracket");
 						return;
 						}
 					++sib;

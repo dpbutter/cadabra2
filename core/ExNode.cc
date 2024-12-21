@@ -287,7 +287,8 @@ void ExNode::set_name(std::string nm)
 	{
 	if(!ex->is_valid(it))
 		throw ConsistencyException("Cannot set the value of an iterator before the first 'next'.");
-	it->name = name_set.insert(nm).first;
+	// it->name = name_set.insert(nm).first;
+	ex->rename(it, nm);
 	}
 
 cadabra::Ex ExNode::get_ex() const

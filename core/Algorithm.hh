@@ -97,6 +97,10 @@ namespace cadabra {
 
 			result_t  apply_pre_order(bool repeat=false);
 
+			/// Apply algorithm exploiting the nodemap to find target nodes.
+			result_t apply_with_map(bool deep=true, bool repeat=false, unsigned int depth=0);
+
+
 			// Global information
 			unsigned int     number_of_calls;
 			unsigned int     number_of_modifications;

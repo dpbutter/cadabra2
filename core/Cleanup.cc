@@ -24,9 +24,6 @@ namespace cadabra {
 #ifdef DEBUG
 		std::cerr << "cleanup at " << *it->name << std::endl;
 #endif
-		if (tr.is_mapped()) {
-			tr.nodemap->remove_subtree(it);
-		}
 
 		// Run the cleanup as long as the expression changes.
 		bool changed;
@@ -36,7 +33,8 @@ namespace cadabra {
 			if(it->is_zero() && (tr.number_of_children(it)!=0 || *it->name!="1")) {
 				cadabra::zero(it->multiplier);
 				tr.erase_children(it);
-				it->name=name_set.insert("1").first;
+				// it->name=name_set.insert("1").first;
+				tr.rename(it, "1");
 				// once we hit zero, there is nothing to simplify anymore
 				break;
 				}
@@ -99,9 +97,6 @@ namespace cadabra {
 			}
 		while(changed);
 
-		if (tr.is_mapped()) {
-			tr.nodemap->add_subtree(it);
-		}
 
 		//	std::cerr << Ex(it) << std::endl;
 		}
@@ -165,13 +160,15 @@ namespace cadabra {
 		if(*arg->name=="1") {
 			if(*arg->multiplier==1) { // 1**anything = 1
 				tr.erase_children(it);
-				it->name=name_set.insert("1").first;
+				// it->name=name_set.insert("1").first;
+				tr.rename(it, "1");
 				return true;
 				}
 			if(*exp->name=="1" && *exp->multiplier==-1) {    // Turn (numerical)**(-1) into a multiplier.
 				multiply(it->multiplier, multiplier_t(1)/(*arg->multiplier));
 				tr.erase_children(it);
-				it->name = name_set.insert("1").first;
+				// it->name = name_set.insert("1").first;
+				tr.rename(it, "1");
 				return true;
 				}
 			}
@@ -354,7 +351,8 @@ namespace cadabra {
 			}
 		else if(tr.number_of_children(it)==0) {   // i.e. from '3*4*7*9'
 			ret=true;
-			it->name=name_set.insert("1").first;
+			// it->name=name_set.insert("1").first;
+			tr.rename(it, "1");
 			}
 
 
@@ -860,7 +858,8 @@ namespace cadabra {
 				//			::one(it->multiplier);
 				tr.erase_children(it);
 				ret=true;
-				it->name=name_set.insert("1").first;
+				// it->name=name_set.insert("1").first;
+				tr.rename(it, "1");
 				}
 			}
 
@@ -908,7 +907,8 @@ namespace cadabra {
 		
 		// All siblings are lists. Join them together into one
 		// long list.
-		it->name = name_set.insert("\\comma").first;
+		// it->name = name_set.insert("\\comma").first;
+		tr.rename(it, "\\comma");
 		sib=tr.begin(it);
 		while(sib!=tr.end(it)) {
 			auto nxt = sib;

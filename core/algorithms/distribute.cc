@@ -52,7 +52,8 @@ Algorithm::result_t distribute::apply(iterator& prod)
 		std::string sumname=*(*facs).name;
 		if(sumname=="\\sum" || sumname=="\\oplus") {
 			sibling_iterator se=rep.begin(top);
-			rep.begin()->name=facs->name;
+			// rep.begin()->name=facs->name;
+			rep.rename(rep.begin(), facs->name);
 			// "se" iterates over all nodes in the replacement \sum
 			while(se!=rep.end(top)) {
 				if(interrupted)
