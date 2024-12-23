@@ -17,6 +17,10 @@ namespace cadabra {
 
 			virtual bool     can_apply(iterator);
 			virtual result_t apply(iterator&);
+
+			virtual Ex::queued_iterator build_queued_iterator();
+			virtual bool is_mapped();
+
 		};
 
 	}

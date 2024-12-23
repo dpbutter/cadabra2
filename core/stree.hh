@@ -18,8 +18,6 @@
 #include <map>
 #include <sstream>
 
-template <class T, class tree_node_allocator = std::allocator<tree_node_<T>>>
-class Nodemap;
 
 /// A node in the tree, combining links to other nodes as well as the actual data.
 template<class T>
@@ -87,7 +85,11 @@ class navigation_error : public std::logic_error {
 //
 //		std::string stacktrace;
 };
-		
+
+template <class T, class tree_node_allocator>
+class Nodemap;
+
+
 template <class T, class tree_node_allocator = std::allocator<tree_node_<T> > >
 class tree {
 	protected:
@@ -277,6 +279,76 @@ class tree {
 			private:
 				tree_node *top_node;
       };
+		
+		/// Iterator that traverses a queue of nodes.
+		class queued_iterator : public iterator_base {
+			public:
+				queued_iterator() : iterator_base(0) {}
+
+				queued_iterator(std::queue<tree_node*>&& queue)
+					: iterator_base(), queue_(std::move(queue)) {
+						this->node = this->queue_.front();
+					}
+
+				queued_iterator&  operator++() {
+					assert(this->node!=0);
+					this->queue_.pop();
+					if (this->queue_.empty()) {
+						this->node = 0;
+					} else {
+						this->node = this->queue_.front();
+					}
+					return *this;
+				}
+				
+				bool operator==(const iterator_base& other) const
+				{
+				return other.node==this->node;
+				}
+
+				bool operator!=(const iterator_base& other) const
+				{
+				return other.node!=this->node;
+				}
+
+				queued_iterator&  add(tree_node* node) {
+					this->queue_.push(node);
+					if (this->node == 0) this->node = this->queue_.front();
+					return *this;
+				}
+
+				size_t size() {
+					return queue_.size();
+				}
+
+				// bool    operator==(const iterator_base&) const;
+				// bool    operator!=(const iterator_base&) const;
+			    // queued_iterator&  operator--();
+
+				// queued_iterator&  add(std::vector<tree_node*>);			
+				// queued_iterator&  remove(tree_node*);
+				// queued_iterator   operator++(int);
+				// queued_iterator   operator--(int);
+				// queued_iterator&  operator+=(unsigned int);
+				// queued_iterator&  operator-=(unsigned int);
+
+				/*
+            	/// When called, the next increment/decrement skips children of this node.
+				void         skip_children();
+				void         skip_children(bool skip);
+				/// Number of children of the node pointed to by the iterator.
+				unsigned int number_of_children() const;
+
+				sibling_iterator begin() const;
+				sibling_iterator end() const;
+				*/
+
+				tree_node *node;
+
+			private:
+				std::queue<tree_node*> queue_;
+		};
+
 
 		/// Return iterator to the beginning of the tree.
 		inline pre_order_iterator   begin() const;
@@ -3555,6 +3627,7 @@ bool tree<T, tree_node_allocator>::is_mapped(const tree_node* node) const
     }
 
 
+
 /// Nodemap class for providing a map of a tree object
 template <class T, class tree_node_allocator = std::allocator<tree_node_<T>>>
 class Nodemap {
@@ -3582,6 +3655,7 @@ class Nodemap {
         
 
         typedef typename tree<T,tree_node_allocator>::pre_order_iterator      iterator;
+		typedef typename tree<T,tree_node_allocator>::iterator_base           iterator_base;
         typedef typename std::deque<tree_node_t*>::iterator		              queued_iterator;
 
         Nodemap(tree<T,tree_node_allocator>* tr_ptr) : tr_ptr_(tr_ptr) {build();}
@@ -3589,10 +3663,13 @@ class Nodemap {
         void build();
         void map_node(tree_node_t*);
         void unmap_node(tree_node_t*);
-        void map_node(const iterator&);
-        void unmap_node(const iterator&);
-        void map_subtree(const iterator&);
-        void unmap_subtree(const iterator&);
+        void map_node(const iterator_base&);
+        void unmap_node(const iterator_base&);
+        void map_subtree(const iterator_base&);
+        void unmap_subtree(const iterator_base&);
+		bool contains_node(tree_node_t*);
+		bool contains_node(const iterator_base&);
+
         node_sets_t find_pattern(tree<T,tree_node_allocator>&);
         void cleanup();
 		std::string print() const;
@@ -3600,47 +3677,6 @@ class Nodemap {
         
 		bool operator==(Nodemap<T, tree_node_allocator>&) const;
 		bool operator!=(Nodemap<T, tree_node_allocator>&) const;
-
-
-		class queued_iterator {
-			public:
-				typedef T                               value_type;
-				typedef T*                              pointer;
-				typedef T&                              reference;
-				typedef size_t                          size_type;
-				typedef ptrdiff_t                       difference_type;
-
-				queued_iterator(node_sets_t);
-
-				T&             operator*() const;
-				T*             operator->() const;
-
-				bool    operator==(const pre_order_iterator&) const;
-				bool    operator!=(const pre_order_iterator&) const;
-				queued_iterator&  operator++();
-			    queued_iterator&  operator--();
-				// queued_iterator   operator++(int);
-				// queued_iterator   operator--(int);
-				// queued_iterator&  operator+=(unsigned int);
-				// queued_iterator&  operator-=(unsigned int);
-
-				void set_depth(int);
-				/*
-            	/// When called, the next increment/decrement skips children of this node.
-				void         skip_children();
-				void         skip_children(bool skip);
-				/// Number of children of the node pointed to by the iterator.
-				unsigned int number_of_children() const;
-
-				sibling_iterator begin() const;
-				sibling_iterator end() const;
-				*/
-
-				tree_node_t *node;
-			private:
-				node_set_t queue_;
-				Nodemap* nodemap;
-		}
 
     private:
         nodemap_t   map_;
@@ -3678,14 +3714,14 @@ void Nodemap<T, tree_node_allocator>::map_node(tree_node_t* node) {
     }
 }
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_node(const iterator& it) {
+void Nodemap<T, tree_node_allocator>::map_node(const iterator_base& it) {
 	map_node(it.node);
 }
 
 
 // Add a subtree to the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_subtree(const iterator& start) {
+void Nodemap<T, tree_node_allocator>::map_subtree(const iterator_base& start) {
     // start begins at root node of the subtree
     typename tree<T, tree_node_allocator>::post_order_iterator it = start;
     // Add subtree root to node map
@@ -3713,13 +3749,13 @@ void Nodemap<T, tree_node_allocator>::unmap_node(tree_node_t* node) {
     }
 }
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::unmap_node(const iterator& it) {
+void Nodemap<T, tree_node_allocator>::unmap_node(const iterator_base& it) {
 	unmap_node(it.node);
 }
 
 // Remove a subtree from the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::unmap_subtree(const iterator& start) {
+void Nodemap<T, tree_node_allocator>::unmap_subtree(const iterator_base& start) {
     // start begins at root node of the subtree
     typename tree<T, tree_node_allocator>::post_order_iterator it = start;
 
@@ -3732,6 +3768,27 @@ void Nodemap<T, tree_node_allocator>::unmap_subtree(const iterator& start) {
 		unmap_node(it.node);
         ++it;
     }
+}
+
+
+// Query if a node exists in the nodemap
+template <class T, class tree_node_allocator>
+bool Nodemap<T, tree_node_allocator>::contains_node(tree_node_t* node) {
+    if ( node->is_labelled() ) {
+		int node_depth = tr_ptr_->depth(node);
+        node_sets_t &node_sets = map_[node->label()];
+		// We cannot guarantee that unmap_node won't be called on a node from another tree.
+		// e.g. move_ontop is often called with the iterator from another tree
+        if (node_depth < static_cast<int>(node_sets.size())) {
+            return node_sets[node_depth].find(node) != node_sets[node_depth].end();
+        } else {
+			return false;
+		}
+    }
+}
+template <class T, class tree_node_allocator>
+bool Nodemap<T, tree_node_allocator>::contains_node(const iterator_base& it) {
+	return contains_node(it.node);
 }
 
 // Clean up a nodemap by removing entries that are no longer needed
@@ -3921,6 +3978,10 @@ template <class T, class tree_node_allocator>
 bool Nodemap<T, tree_node_allocator>::operator!=(Nodemap<T, tree_node_allocator>& other) const {
 	return !(this->map_ == other.map);
 }
+
+
+
+
 
 #endif
 

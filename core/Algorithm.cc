@@ -104,6 +104,9 @@ Algorithm::result_t Algorithm::apply_pre_order(bool repeat)
 
 Algorithm::result_t Algorithm::apply_generic(bool deep, bool repeat, unsigned int depth)
 	{
+	if (is_mapped()) {
+		return apply_with_map();
+	}
 	auto it = tr.begin();
 	return apply_generic(it, deep, repeat, depth);
 	}
@@ -115,6 +118,10 @@ Algorithm::result_t Algorithm::apply_generic(Ex::iterator& it, bool deep, bool r
 #else
 	ScopedProgressGroup(typeid(*this).name());
 #endif
+
+	if (is_mapped()) {
+		return apply_with_map();
+	}
 
 	result_t ret=result_t::l_no_action;
 
@@ -189,7 +196,7 @@ Algorithm::result_t Algorithm::apply_generic(Ex::iterator& it, bool deep, bool r
 	}
 
 
-Algorithm::result_t Algorithm::apply_with_map(bool deep, bool repeat, unsigned int depth)
+Algorithm::result_t Algorithm::apply_with_map()
 	{
 	/* 
 	 * Entry point for applying algorithm exploiting nodemap.
@@ -225,16 +232,45 @@ Algorithm::result_t Algorithm::apply_with_map(bool deep, bool repeat, unsigned i
 	 * 
 	 */
 	
+	// This function should be called by apply_generic, so we assume everything is valid.
 
-	// If tree is unmapped or this algo doesn't use the mapping, just call the usual apply routine.
-	// FIXME: This might be redundant depending on how the algo is called.
-	if !(tr.is_mapped() && this->uses_map()) {
-		return apply_generic(deep, repeat, depth);
+	// Acquire the queue of nodes. This function is different for each algorithm.
+	Ex::queued_iterator queued_it = build_queued_iterator();
+	result_t ret=result_t::l_no_action;
+	
+	while (queued_it.node != 0) {
+		if (!tr.nodemap->contains_node(queued_it)) {
+			++queued_it;
+			continue;
+		}
+		iterator it = queued_it.node;
+		if (!can_apply(it)) {
+			continue;
+		}
+		result_t thisret = apply(it);
+
+		if(thisret==result_t::l_applied || thisret==result_t::l_applied_no_new_dummies)
+			ret=result_t::l_applied;
+
+		// call cleanup_dispatch
+		++queued_it;
 	}
+	
+	return ret;
 
-	// Acquire the queue of nodes, this is different for each type
+	/*
+	if(traverse_ldots || !tr.is_hidden(it)) {
+		if(can_apply(it)) {
+			result_t res=apply(it);
+			// std::cerr << "apply algorithm at " << *it->name << std::endl;
+			if(res==result_t::l_applied || res==result_t::l_applied_no_new_dummies) {
+				cleanup_dispatch(kernel, tr, it);
+				return res;
+				}
+			}
+		}
 
-
+	*/
 
 	}
 

@@ -128,3 +128,26 @@ Algorithm::result_t distribute::apply(iterator& prod)
 	prod=ret;
 	return result_t::l_applied;
 	}
+
+Ex::queued_iterator distribute::build_queued_iterator()
+	{
+	// In this alpha version, we search for a certain product over a sum.
+	Ex pattern;
+	pattern.set_head(str_node("\\sum"));
+	pattern.append_child(pattern.begin(), str_node("\\prod"));
+
+	Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
+	Ex::queued_iterator queued_iterator;
+
+	for (const auto& node_set : node_sets) {
+		for (const auto& node : node_set) {
+			queued_iterator.add(node);
+		}
+	}
+	return queued_iterator;
+	}
+
+
+bool distribute::is_mapped() {
+	return tr.is_mapped();
+}

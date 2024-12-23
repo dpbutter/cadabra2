@@ -98,7 +98,7 @@ namespace cadabra {
 			result_t  apply_pre_order(bool repeat=false);
 
 			/// Apply algorithm exploiting the nodemap to find target nodes.
-			result_t apply_with_map(bool deep=true, bool repeat=false, unsigned int depth=0);
+			virtual result_t apply_with_map();
 
 
 			// Global information
@@ -231,8 +231,10 @@ namespace cadabra {
 			void     node_one(iterator);
 			void     node_integer(iterator, int);
 
-
-
+			// Boolean to determine if the algorithm should use nodemap
+			virtual Ex::queued_iterator build_queued_iterator() {Ex::queued_iterator foo; return foo;}
+			virtual bool is_mapped() {return false;}
+			
 		protected:
 			bool traverse_ldots;
 
