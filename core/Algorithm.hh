@@ -232,8 +232,9 @@ namespace cadabra {
 			void     node_integer(iterator, int);
 
 			// Boolean to determine if the algorithm should use nodemap
-			virtual Ex::queued_iterator build_queued_iterator() {Ex::queued_iterator foo; return foo;}
 			virtual bool is_mapped() {return false;}
+			virtual Ex_Nodemap::node_sets_t get_mapped_nodes() {Ex_Nodemap::node_sets_t empty; return empty;}
+			// virtual Ex::queued_iterator build_queued_iterator() {Ex::queued_iterator foo; return foo;}
 			
 		protected:
 			bool traverse_ldots;

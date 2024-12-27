@@ -7,11 +7,40 @@
 #include "algorithms/flatten_product.hh"
 #include "properties/Distributable.hh"
 
+
 using namespace cadabra;
 
 distribute::distribute(const Kernel& k, Ex& tr)
 	: Algorithm(k, tr)
 	{
+	/* FIXME: Below is a simple kludge until a fancier properties system is available. */
+	if (is_mapped()) {
+		// Build a list of all possible nodes at which one can apply distribute.
+		std::vector<nset_t::iterator> product_like_nodes;
+		for (const auto& [name_it, pat_prop_pair] : k.properties.props) {
+			// name_it is the name iterator for the top node of the property
+			// pat_prop_pair is a pair of the pattern and the property
+
+			// If the property is castable to Distributable, record its name
+			const Distributable *db=dynamic_cast<const Distributable*>(pat_prop_pair.second);
+			if (db) {
+				// add name_it to product names
+				product_like_nodes.push_back(name_it);
+			}
+		}
+		std::vector<nset_t::iterator> sum_like_nodes = {name_set.insert("\\sum").first,
+		                                                name_set.insert("\\oplus").first
+														};
+		for (const auto& prod_name : product_like_nodes ) {
+			for (const auto& sum_name : sum_like_nodes) {
+				Ex pattern;
+				pattern.set_head(str_node(prod_name));
+				pattern.append_child(pattern.begin(), str_node(sum_name));
+				patterns_.push_back(std::move(pattern));
+			}
+
+		}
+	}
 	}
 
 bool distribute::can_apply(iterator st)
@@ -129,22 +158,56 @@ Algorithm::result_t distribute::apply(iterator& prod)
 	return result_t::l_applied;
 	}
 
+/*
 Ex::queued_iterator distribute::build_queued_iterator()
 	{
-	// In this alpha version, we search for a certain product over a sum.
-	Ex pattern;
-	pattern.set_head(str_node("\\sum"));
-	pattern.append_child(pattern.begin(), str_node("\\prod"));
+	// For every pattern in patterns_, compute the node_sets.
+	// Then organize these by depth.
 
+	Ex_Nodemap::node_sets_t master_sets;
+
+	for (const auto& pattern : patterns_) {
+		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
+
+	}
+
+	// In this alpha version, we search for a certain product over a sum.
 	Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
 	Ex::queued_iterator queued_iterator;
 
-	for (const auto& node_set : node_sets) {
-		for (const auto& node : node_set) {
+	// Reverse the order of the iterators to do deeper ones first
+	for (auto it = node_sets.rbegin(); it != node_sets.rend(); ++it) {
+		for (const auto& node : *it) {
 			queued_iterator.add(node);
 		}
 	}
 	return queued_iterator;
+	}
+*/
+
+Ex_Nodemap::node_sets_t distribute::get_mapped_nodes()
+	{
+	/* For every pattern in patterns_, compute the node_sets.
+	 * Then organize these by depth.
+	 */
+
+	Ex_Nodemap::node_sets_t master_sets;
+
+	for (auto& pattern : patterns_) {
+		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
+		if (node_sets.size() > master_sets.size()) {
+			master_sets.resize(node_sets.size());
+		}
+		for (int i=0; i<node_sets.size(); i++) {
+			Ex_Nodemap::node_set_t new_set;
+			std::set_union(master_sets[i].cbegin(), master_sets[i].cend(),
+				node_sets[i].cbegin(), node_sets[i].cend(),
+				std::inserter(new_set, new_set.begin()));
+			master_sets[i] = new_set;
+		}
+	}
+
+	return master_sets;
 	}
 
 

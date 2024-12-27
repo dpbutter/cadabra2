@@ -41,6 +41,9 @@ namespace cadabra {
 			/// pre-processed and sit in the cache.
 			static size_t cache_size();
 
+			virtual Ex_Nodemap::node_sets_t get_mapped_nodes();
+			virtual bool is_mapped();
+
 		private:
 			Ex&     args;
 
@@ -53,6 +56,10 @@ namespace cadabra {
 			sort_product    sort_product_;
 			bool            partial;
 			
+
+			std::vector<Ex> patterns_;
+
+
 			// Rules is a class for caching properties of substitution
 			// rules to avoid processing them in subsequent calls.
 

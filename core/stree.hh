@@ -321,30 +321,6 @@ class tree {
 					return queue_.size();
 				}
 
-				// bool    operator==(const iterator_base&) const;
-				// bool    operator!=(const iterator_base&) const;
-			    // queued_iterator&  operator--();
-
-				// queued_iterator&  add(std::vector<tree_node*>);			
-				// queued_iterator&  remove(tree_node*);
-				// queued_iterator   operator++(int);
-				// queued_iterator   operator--(int);
-				// queued_iterator&  operator+=(unsigned int);
-				// queued_iterator&  operator-=(unsigned int);
-
-				/*
-            	/// When called, the next increment/decrement skips children of this node.
-				void         skip_children();
-				void         skip_children(bool skip);
-				/// Number of children of the node pointed to by the iterator.
-				unsigned int number_of_children() const;
-
-				sibling_iterator begin() const;
-				sibling_iterator end() const;
-				*/
-
-				tree_node *node;
-
 			private:
 				std::queue<tree_node*> queue_;
 		};
@@ -3774,6 +3750,7 @@ void Nodemap<T, tree_node_allocator>::unmap_subtree(const iterator_base& start) 
 // Query if a node exists in the nodemap
 template <class T, class tree_node_allocator>
 bool Nodemap<T, tree_node_allocator>::contains_node(tree_node_t* node) {
+	/*
     if ( node->is_labelled() ) {
 		int node_depth = tr_ptr_->depth(node);
         node_sets_t &node_sets = map_[node->label()];
@@ -3785,6 +3762,18 @@ bool Nodemap<T, tree_node_allocator>::contains_node(tree_node_t* node) {
 			return false;
 		}
     }
+	*/
+
+	// Look through the entire nodemap for node (which might be invalid).
+	for (const auto& [name, node_sets]: map_) {
+		for (auto const& node_set : node_sets) {
+			if (node_set.find(node) != node_set.end()) {
+				return true;
+			}
+		}
+	}
+	return false;
+
 }
 template <class T, class tree_node_allocator>
 bool Nodemap<T, tree_node_allocator>::contains_node(const iterator_base& it) {
@@ -3824,8 +3813,7 @@ void Nodemap<T, tree_node_allocator>::shrink_(node_sets_t& node_sets) {
 // Loosely find matches for a pattern using the nodemap
 template <class T, class tree_node_allocator>
 typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_allocator>::find_pattern(tree<T, tree_node_allocator>& pattern) {
-   /* Match the name nodes in a pattern against nodes in the nodemap, 
-	* ignoring indices (which are not tracked).
+   /* Match labelled name nodes in a pattern against nodes in the nodemap.
 	*
 	* The pattern is assumed to be sanitized, meaning that it contains no object
 	* wildcards or indices, only (at most) name wildcards.
@@ -3865,7 +3853,7 @@ typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_alloc
         }
 
     }
-    assert(useful_result);
+    assert(useful_result || found_nodes.size() == 0);
     
     // Use explicit move of found_nodes
     // return std::move(found_nodes);
@@ -3877,12 +3865,12 @@ template <class T, class tree_node_allocator>
 bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(iterator it, int node_depth, node_set_t& node_set) {
     
     // Process the current node if it is useful.
-    bool node_useful = !it->is_name_wildcard();
+    bool node_useful = it->is_labelled();
     if (node_useful) {
         // Set node_set to all nodes with names it->label() at depth=node_depth.
         // No copying of sets here, so this is very fast.
         if (map_.find(it->label()) != map_.end()) {
-            node_sets_t &node_sets = map_[it->label()];
+            node_sets_t& node_sets = map_[it->label()];
             if (node_depth < static_cast<int>(node_sets.size())) {
                 node_set = node_sets[node_depth];
             }

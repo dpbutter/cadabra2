@@ -231,9 +231,10 @@ Algorithm::result_t Algorithm::apply_with_map()
 	 * Or we just accept that we won't catch it on the first pass and might need to repeat.
 	 * 
 	 */
-	
+
 	// This function should be called by apply_generic, so we assume everything is valid.
 
+	/*
 	// Acquire the queue of nodes. This function is different for each algorithm.
 	Ex::queued_iterator queued_it = build_queued_iterator();
 	result_t ret=result_t::l_no_action;
@@ -243,7 +244,8 @@ Algorithm::result_t Algorithm::apply_with_map()
 			++queued_it;
 			continue;
 		}
-		iterator it = queued_it.node;
+		iterator it;
+		it.node = queued_it.node;
 		if (!can_apply(it)) {
 			continue;
 		}
@@ -253,24 +255,49 @@ Algorithm::result_t Algorithm::apply_with_map()
 			ret=result_t::l_applied;
 
 		// call cleanup_dispatch
+		cleanup_dispatch(kernel, tr, it);
 		++queued_it;
 	}
-	
-	return ret;
+	*/
 
-	/*
-	if(traverse_ldots || !tr.is_hidden(it)) {
-		if(can_apply(it)) {
-			result_t res=apply(it);
-			// std::cerr << "apply algorithm at " << *it->name << std::endl;
-			if(res==result_t::l_applied || res==result_t::l_applied_no_new_dummies) {
+	// FIXME: This implementation is a bit awkward.
+
+	result_t ret=result_t::l_no_action;
+	Ex_Nodemap::node_sets_t  node_sets_by_depth = get_mapped_nodes();
+	int max_depth = node_sets_by_depth.size()-1;
+
+	// Loop over depths
+	for (int depth = max_depth; depth >=0; depth--) {
+		Ex_Nodemap::node_set_t parent_nodes;
+
+		// At a fixed depth, look over node_set
+		Ex_Nodemap::node_set_t& node_set = node_sets_by_depth[depth];
+		for (Ex_Nodemap::tree_node_t* node : node_set) {
+			iterator it;
+			it.node = node;
+			if (!can_apply(it)) {
+				continue;
+			}
+			Ex_Nodemap::tree_node_t* parent = node->parent;
+			result_t thisret = apply(it);
+			if(thisret==result_t::l_applied || thisret==result_t::l_applied_no_new_dummies) {
 				cleanup_dispatch(kernel, tr, it);
-				return res;
+				ret=result_t::l_applied;
+				if (depth > 0) {
+					parent_nodes.insert(parent);
 				}
 			}
 		}
 
-	*/
+		// call cleanup_dispatch on all the parent nodes
+		for (Ex_Nodemap::tree_node_t* node : parent_nodes) {
+			iterator it;
+			it.node = node;
+			cleanup_dispatch(kernel, tr, it);
+		}
+	}
+
+	return ret;
 
 	}
 
