@@ -9,6 +9,20 @@ using namespace cadabra;
 eliminate_kronecker::eliminate_kronecker(const Kernel& k, Ex& tr)
 	: Algorithm(k, tr)
 	{
+	if (is_mapped()) {
+		// Find all nodes that could be Kronecker deltas
+		for (const auto& [name_it, pat_prop_pair] : k.properties.props) {
+			// name_it is the name iterator for the top node of the property
+			// pat_prop_pair is a pair of the pattern and the property
+
+			// If the property is castable to Distributable, record its name
+			const KroneckerDelta *db=dynamic_cast<const KroneckerDelta*>(pat_prop_pair.second);
+			if (db) {
+				// Add the pattern Ex object to patterns_
+				patterns_.push_back(pat_prop_pair.first->obj);
+			}
+		}
+	}
 	}
 
 bool eliminate_kronecker::can_apply(iterator st)
@@ -147,3 +161,32 @@ Algorithm::result_t eliminate_kronecker::apply(iterator& st)
 
 	return ret;
 	}
+
+
+Ex_Nodemap::node_sets_t eliminate_kronecker::get_mapped_nodes()
+	{
+	// Overload get_mapped_nodes since we need to find the parent node of the kronecker delta
+
+	Ex_Nodemap::node_sets_t parent_sets;
+
+	for (auto& pattern : patterns_) {
+		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
+		if (node_sets.size() > parent_sets.size() + 1) {
+			parent_sets.resize(node_sets.size()-1);
+		}
+		for (int i=1; i<node_sets.size(); i++) {
+			// We could use map_nodes_to_parents in stree.hh but the below is more direct
+			std::transform(node_sets[i].begin(), node_sets[i].end(),
+			               std::inserter(parent_sets[i-1], parent_sets[i-1].begin()),
+			               [](Ex_Nodemap::tree_node_t* node) { return node->parent; });
+			// FIXME: Check for null pointer?
+		}
+	}
+
+	return parent_sets;
+	}
+
+
+bool eliminate_kronecker::is_mapped() {
+	return tr.is_mapped();
+}

@@ -158,58 +158,6 @@ Algorithm::result_t distribute::apply(iterator& prod)
 	return result_t::l_applied;
 	}
 
-/*
-Ex::queued_iterator distribute::build_queued_iterator()
-	{
-	// For every pattern in patterns_, compute the node_sets.
-	// Then organize these by depth.
-
-	Ex_Nodemap::node_sets_t master_sets;
-
-	for (const auto& pattern : patterns_) {
-		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
-
-	}
-
-	// In this alpha version, we search for a certain product over a sum.
-	Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
-	Ex::queued_iterator queued_iterator;
-
-	// Reverse the order of the iterators to do deeper ones first
-	for (auto it = node_sets.rbegin(); it != node_sets.rend(); ++it) {
-		for (const auto& node : *it) {
-			queued_iterator.add(node);
-		}
-	}
-	return queued_iterator;
-	}
-*/
-
-Ex_Nodemap::node_sets_t distribute::get_mapped_nodes()
-	{
-	/* For every pattern in patterns_, compute the node_sets.
-	 * Then organize these by depth.
-	 */
-
-	Ex_Nodemap::node_sets_t master_sets;
-
-	for (auto& pattern : patterns_) {
-		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
-		if (node_sets.size() > master_sets.size()) {
-			master_sets.resize(node_sets.size());
-		}
-		for (int i=0; i<node_sets.size(); i++) {
-			Ex_Nodemap::node_set_t new_set;
-			std::set_union(master_sets[i].cbegin(), master_sets[i].cend(),
-				node_sets[i].cbegin(), node_sets[i].cend(),
-				std::inserter(new_set, new_set.begin()));
-			master_sets[i] = new_set;
-		}
-	}
-
-	return master_sets;
-	}
-
 
 bool distribute::is_mapped() {
 	return tr.is_mapped();

@@ -105,7 +105,7 @@ Algorithm::result_t Algorithm::apply_pre_order(bool repeat)
 Algorithm::result_t Algorithm::apply_generic(bool deep, bool repeat, unsigned int depth)
 	{
 	if (is_mapped()) {
-		return apply_with_map();
+		return apply_with_map(deep, repeat, depth);
 	}
 	auto it = tr.begin();
 	return apply_generic(it, deep, repeat, depth);
@@ -195,8 +195,35 @@ Algorithm::result_t Algorithm::apply_generic(Ex::iterator& it, bool deep, bool r
 	return ret;
 	}
 
+Ex_Nodemap::node_sets_t Algorithm::get_mapped_nodes()
+	{
+	/* For every pattern in patterns_, compute the node_sets.
+	 * Then organize these by depth.
+	 */
 
-Algorithm::result_t Algorithm::apply_with_map()
+	Ex_Nodemap::node_sets_t master_sets;
+
+	for (auto& pattern : patterns_) {
+		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
+		if (node_sets.size() > master_sets.size()) {
+			master_sets.resize(node_sets.size());
+		}
+		for (int i=0; i<node_sets.size(); i++) {
+			/*
+			Ex_Nodemap::node_set_t new_set;
+			std::set_union(master_sets[i].cbegin(), master_sets[i].cend(),
+				node_sets[i].cbegin(), node_sets[i].cend(),
+				std::inserter(new_set, new_set.begin()));
+			master_sets[i] = std::move(new_set);
+			*/
+			master_sets[i].insert(node_sets[i].begin(), node_sets[i].end());
+		}
+	}
+
+	return master_sets;
+	}
+
+Algorithm::result_t Algorithm::apply_with_map(bool deep, bool repeat, unsigned int depth)
 	{
 	/* 
 	 * Entry point for applying algorithm exploiting nodemap.
@@ -234,71 +261,75 @@ Algorithm::result_t Algorithm::apply_with_map()
 
 	// This function should be called by apply_generic, so we assume everything is valid.
 
-	/*
-	// Acquire the queue of nodes. This function is different for each algorithm.
-	Ex::queued_iterator queued_it = build_queued_iterator();
-	result_t ret=result_t::l_no_action;
-	
-	while (queued_it.node != 0) {
-		if (!tr.nodemap->contains_node(queued_it)) {
-			++queued_it;
-			continue;
-		}
-		iterator it;
-		it.node = queued_it.node;
-		if (!can_apply(it)) {
-			continue;
-		}
-		result_t thisret = apply(it);
-
-		if(thisret==result_t::l_applied || thisret==result_t::l_applied_no_new_dummies)
-			ret=result_t::l_applied;
-
-		// call cleanup_dispatch
-		cleanup_dispatch(kernel, tr, it);
-		++queued_it;
-	}
-	*/
-
 	// FIXME: This implementation is a bit awkward.
 
 	result_t ret=result_t::l_no_action;
-	Ex_Nodemap::node_sets_t  node_sets_by_depth = get_mapped_nodes();
-	int max_depth = node_sets_by_depth.size()-1;
 
-	// Loop over depths
-	for (int depth = max_depth; depth >=0; depth--) {
-		Ex_Nodemap::node_set_t parent_nodes;
-
-		// At a fixed depth, look over node_set
-		Ex_Nodemap::node_set_t& node_set = node_sets_by_depth[depth];
-		for (Ex_Nodemap::tree_node_t* node : node_set) {
-			iterator it;
-			it.node = node;
-			if (!can_apply(it)) {
-				continue;
-			}
-			Ex_Nodemap::tree_node_t* parent = node->parent;
-			result_t thisret = apply(it);
-			if(thisret==result_t::l_applied || thisret==result_t::l_applied_no_new_dummies) {
-				cleanup_dispatch(kernel, tr, it);
-				ret=result_t::l_applied;
-				if (depth > 0) {
-					parent_nodes.insert(parent);
-				}
-			}
-		}
-
-		// call cleanup_dispatch on all the parent nodes
-		for (Ex_Nodemap::tree_node_t* node : parent_nodes) {
-			iterator it;
-			it.node = node;
-			cleanup_dispatch(kernel, tr, it);
-		}
+	if (depth > INT_MAX) {
+		throw std::overflow_error("depth is larger than INT_MAX");
 	}
 
-	return ret;
+	// 'repeat' loop
+	do {
+		result_t this_repeat_ret = result_t::l_no_action;
 
+		Ex_Nodemap::node_sets_t  node_sets_by_depth = get_mapped_nodes();
+		int max_depth = static_cast<int>(node_sets_by_depth.size()-1);
+
+		Ex_Nodemap::node_set_t nodes_to_clean;			// at current depth
+		Ex_Nodemap::node_set_t nodes_to_clean_next;		// at next shallower layer
+
+		if (!deep) {
+			max_depth = static_cast<int>(depth);
+		}
+
+		// Loop over depths (except if depth == 0)
+		for (int curr_depth = max_depth; curr_depth >= static_cast<int>(depth); curr_depth--) {
+			// At a fixed depth, look over node_set
+			Ex_Nodemap::node_set_t& node_set = node_sets_by_depth[curr_depth];
+			for (Ex_Nodemap::tree_node_t* node : node_set) {
+				// We must ensure that the node is still valid.
+				// However, since we organize by depth, we should never run into this problem.
+				// FIXME: Remove this after debugging.			
+				assert(tr.nodemap->contains_node(node));
+
+				iterator it;
+				it.node = node;
+				if (!can_apply(it)) {
+					continue;
+				}
+				Ex_Nodemap::tree_node_t* parent = node->parent;
+				result_t thisret = apply(it);
+				if(thisret==result_t::l_applied || thisret==result_t::l_applied_no_new_dummies) {
+					cleanup_dispatch(kernel, tr, it);
+					ret=result_t::l_applied;
+					this_repeat_ret=result_t::l_applied;
+					if (curr_depth > 0) {
+						nodes_to_clean_next.insert(parent);
+					}
+				}
+			}
+
+			// call cleanup_dispatch on the current batch of nodes to clean
+			for (Ex_Nodemap::tree_node_t* node : nodes_to_clean) {
+				iterator it;
+				it.node = node;
+				if (curr_depth > 0) {
+					nodes_to_clean_next.insert(node->parent);
+				}
+				cleanup_dispatch(kernel, tr, it);
+			}
+			
+			// nodes_to_clean = nodes_to_clean_next.copy()
+			// nodes_to_clean_next.clear()
+			std::swap(nodes_to_clean_next, nodes_to_clean);
+			nodes_to_clean_next.clear();
+
+			repeat = repeat && this_repeat_ret!=result_t::l_no_action;
+		}
+	} while (repeat);
+
+	return ret;
 	}
 
 

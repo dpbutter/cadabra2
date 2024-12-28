@@ -111,6 +111,10 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 	if (is_mapped()) {
 		cadabra::do_list(args, args.begin(), [&](Ex::iterator arrow) {
 			iterator lhs=args.begin(arrow);
+			if (*lhs->name=="\\conditional") {
+				lhs=tr.begin(lhs);
+			}
+			// FIXME: Also maybe store these as iterators and not as separate Ex expressions???
 			patterns_.push_back(Ex(lhs));
 			return true;
 		});
@@ -581,24 +585,6 @@ void substitute::Rules::cleanup()
 		}
 	}
 
-Ex_Nodemap::node_sets_t substitute::get_mapped_nodes() {
-	Ex_Nodemap::node_sets_t master_sets;
-
-	for (auto& pattern : patterns_) {
-		Ex_Nodemap::node_sets_t node_sets = tr.nodemap->find_pattern(pattern);
-		if (node_sets.size() > master_sets.size()) {
-			master_sets.resize(node_sets.size());
-		}
-		for (int i=0; i<node_sets.size(); i++) {
-			Ex_Nodemap::node_set_t new_set;
-			std::set_union(master_sets[i].cbegin(), master_sets[i].cend(),
-				node_sets[i].cbegin(), node_sets[i].cend(),
-				std::inserter(new_set, new_set.begin()));
-			master_sets[i] = new_set;
-		}
-	}
-	return master_sets;
-}
 
 bool substitute::is_mapped() {
 	return tr.is_mapped();

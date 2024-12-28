@@ -98,7 +98,7 @@ namespace cadabra {
 			result_t  apply_pre_order(bool repeat=false);
 
 			/// Apply algorithm exploiting the nodemap to find target nodes.
-			virtual result_t apply_with_map();
+			virtual result_t apply_with_map(bool deep=true, bool repeat=false, unsigned int depth=0);
 
 
 			// Global information
@@ -154,6 +154,9 @@ namespace cadabra {
 		protected:
 			Ex& tr;
 			ProgressMonitor *pm;
+
+			/** Addition for nodemap **/
+			std::vector<Ex> patterns_;
 
 			// The main entry point which is used by the public entry points listed
 			// above. Override these in any subclass.
@@ -231,9 +234,10 @@ namespace cadabra {
 			void     node_one(iterator);
 			void     node_integer(iterator, int);
 
+			/** Additions for nodemap **/
 			// Boolean to determine if the algorithm should use nodemap
 			virtual bool is_mapped() {return false;}
-			virtual Ex_Nodemap::node_sets_t get_mapped_nodes() {Ex_Nodemap::node_sets_t empty; return empty;}
+			virtual Ex_Nodemap::node_sets_t get_mapped_nodes();
 			// virtual Ex::queued_iterator build_queued_iterator() {Ex::queued_iterator foo; return foo;}
 			
 		protected:

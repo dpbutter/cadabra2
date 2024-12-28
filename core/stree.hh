@@ -3646,7 +3646,12 @@ class Nodemap {
 		bool contains_node(tree_node_t*);
 		bool contains_node(const iterator_base&);
 
+        node_sets_t find_pattern(const iterator&);
         node_sets_t find_pattern(tree<T,tree_node_allocator>&);
+
+		bool validate_pattern(const iterator_base&);
+		bool validate_pattern(tree<T, tree_node_allocator>&);
+
         void cleanup();
 		std::string print() const;
 
@@ -3654,12 +3659,13 @@ class Nodemap {
 		bool operator==(Nodemap<T, tree_node_allocator>&) const;
 		bool operator!=(Nodemap<T, tree_node_allocator>&) const;
 
+        node_set_t map_nodes_to_parents(node_set_t);
+
     private:
         nodemap_t   map_;
         tree<T,tree_node_allocator>*			tr_ptr_;				// Pointer to the tree object used by nodemap
 
-        bool find_pattern_recursive_(iterator, int, node_set_t&);
-        node_set_t map_nodes_to_parents_(node_set_t);
+        bool find_pattern_recursive_(const iterator&, int, node_set_t&);
         int used_depth_(node_sets_t&) const;
         void shrink_(node_sets_t&);
 
@@ -3810,9 +3816,37 @@ void Nodemap<T, tree_node_allocator>::shrink_(node_sets_t& node_sets) {
     node_sets.resize(used_depth_(node_sets));
 }
 
+
+// Check if there is at least one labelled node in the pattern
+template <class T, class tree_node_allocator>
+bool Nodemap<T, tree_node_allocator>::validate_pattern(tree<T, tree_node_allocator>& pattern) {
+	return validate_pattern(pattern.begin());
+}
+
+// Check if there is at least one labelled node in the pattern beginning at top
+template <class T, class tree_node_allocator>
+bool Nodemap<T, tree_node_allocator>::validate_pattern(const iterator_base& top) 
+	{
+	iterator it=top, eit=top;
+	eit.skip_children();
+	++eit;
+	while(it!=eit) {
+		if (it->is_labelled()) return true;
+		++it;
+		}
+	return false;
+	}
+
+
 // Loosely find matches for a pattern using the nodemap
 template <class T, class tree_node_allocator>
 typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_allocator>::find_pattern(tree<T, tree_node_allocator>& pattern) {
+	return find_pattern(pattern.begin());
+}
+
+// Loosely find matches for a pattern using the nodemap
+template <class T, class tree_node_allocator>
+typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_allocator>::find_pattern(const iterator& start) {
    /* Match labelled name nodes in a pattern against nodes in the nodemap.
 	*
 	* The pattern is assumed to be sanitized, meaning that it contains no object
@@ -3823,7 +3857,6 @@ typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_alloc
 	* 
 	* FIXME: Think about this more.
 	*/
-    typename tree<T, tree_node_allocator>::iterator start = pattern.begin();
 
     // Find all the depths at which the pattern starts
     node_sets_t found_nodes;
@@ -3853,16 +3886,19 @@ typename Nodemap<T, tree_node_allocator>::node_sets_t Nodemap<T, tree_node_alloc
         }
 
     }
-    assert(useful_result || found_nodes.size() == 0);
+	// FIXME: Maybe this should just be useful_result?
+    // assert(useful_result || found_nodes.size() == 0);
+	assert(useful_result);
     
     // Use explicit move of found_nodes
     // return std::move(found_nodes);
     return found_nodes;
 }
 
+
 // Match the pattern beginning at given depth, returning true if pattern valid
 template <class T, class tree_node_allocator>
-bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(iterator it, int node_depth, node_set_t& node_set) {
+bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(const iterator& it, int node_depth, node_set_t& node_set) {
     
     // Process the current node if it is useful.
     bool node_useful = it->is_labelled();
@@ -3897,7 +3933,7 @@ bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(iterator it, int n
         some_child_nodes_useful = true;
 
         // map child_nodes to their parent
-        parents_of_child_nodes = map_nodes_to_parents_(child_nodes);
+        parents_of_child_nodes = map_nodes_to_parents(child_nodes);
         
         if (!node_useful) {
             // In this case, just assign the parents_of_child_nodes to it.
@@ -3909,7 +3945,7 @@ bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(iterator it, int n
                                 parents_of_child_nodes.begin(), parents_of_child_nodes.end(),
                                 std::inserter(intersection, intersection.begin()));
             
-            node_set = intersection;			
+            node_set = std::move(intersection);
         }
 
         if (node_set.empty()) {
@@ -3923,7 +3959,7 @@ bool Nodemap<T, tree_node_allocator>::find_pattern_recursive_(iterator it, int n
 }
 
 template <class T, class tree_node_allocator>
-typename Nodemap<T, tree_node_allocator>::node_set_t Nodemap<T, tree_node_allocator>::map_nodes_to_parents_(node_set_t child_nodes) {
+typename Nodemap<T, tree_node_allocator>::node_set_t Nodemap<T, tree_node_allocator>::map_nodes_to_parents(node_set_t child_nodes) {
         node_set_t parent_nodes;
         std::transform(child_nodes.begin(), child_nodes.end(), 
                         std::inserter(parent_nodes, parent_nodes.end()),

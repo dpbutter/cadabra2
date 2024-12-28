@@ -1070,7 +1070,7 @@ found:
 
 
 	bool str_node::is_labelled() const {
-		return !(is_index() || is_rational() || *name=="");
+		return !(is_index() || is_rational() || *name=="" || (*name)[name->size()-1]=='?');
 	}
 
 	std::string str_node::label() const {
