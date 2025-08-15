@@ -4,6 +4,7 @@
 #include "Storage.hh"
 #include "Props.hh"
 #include "properties/Indices.hh"
+#include <map>
 
 namespace cadabra {
 
@@ -18,11 +19,19 @@ namespace cadabra {
 			};
 
 			Lazy_Ex() = default;
-			Lazy_Ex(Ex::iterator it_, repl_t op_) : it(it_), op(op_) {};
+			Lazy_Ex(Ex::iterator it_, repl_t op_) : it(it_), op(op_) {
+				Ex tmp{it};
+				if (op_ == repl_t::erase_children) {
+					tmp.erase_children(tmp.begin());
+				}
+				size_statistics[tmp.size()]++;
+			};
 
 			Ex::iterator it;
 			repl_t op;
 
+			// Collect statistics for how big these Lazy_Ex objects are
+			static std::map<size_t, size_t> size_statistics;
 			// Apply the operation only when needed.
 			Ex resolve()  const noexcept {
 				Ex ret {it};

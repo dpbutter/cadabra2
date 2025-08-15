@@ -1816,6 +1816,8 @@ namespace cadabra {
 		if(ret < 0) return true;
 		else        return false;
 		}
+
+	std::map<size_t, size_t> Lazy_Ex::size_statistics;
 	}
 
 

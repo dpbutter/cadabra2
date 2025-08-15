@@ -353,6 +353,7 @@ namespace cadabra {
 		{
 
 		m.def("properties", &list_properties);
+		m.def("lex_stats", []() {return Lazy_Ex::size_statistics;});
 
 		py::class_<BoundPropertyBase, std::shared_ptr<BoundPropertyBase>>(m, "Property")
 			.def_property_readonly("for_obj", &BoundPropertyBase::get_ex);
