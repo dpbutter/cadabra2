@@ -4,6 +4,7 @@
 #include "Algorithm.hh"
 #include "algorithms/sort_product.hh"
 #include "lru_cache.hh"
+#include <tuple>
 
 namespace cadabra {
 
@@ -47,7 +48,9 @@ namespace cadabra {
 			iterator      use_rule;
 			iterator      conditions;
 
-			std::map<iterator, bool> lhs_contains_dummies, rhs_contains_dummies;
+			// std::map<iterator, bool> lhs_contains_dummies, rhs_contains_dummies;
+			// std::map<iterator, bloom_filter> filters;
+			std::map<iterator, std::tuple<bool, bool, bloom_filter>> rules_data;
 
 			// For object swap testing routines:
 			sort_product    sort_product_;
@@ -56,24 +59,24 @@ namespace cadabra {
 			// Rules is a class for caching properties of substitution
 			// rules to avoid processing them in subsequent calls.
 
+			bloom_parameters bparameters;
 			class Rules {
 
 				public:
+
+					using data = std::tuple<bool, bool, bloom_filter>;
+
 					Rules(size_t max_size_=1000, size_t cleanup_threshold_=100) 
 						: properties(max_size_), max_size(max_size_), cleanup_threshold(cleanup_threshold_) {}
 
 					// Associate rule properties with a specific object
-					void store(Ex& rules,
-								  std::map<iterator, bool>& lhs_contains_dummies,
-								  std::map<iterator, bool>& rhs_contains_dummies);
+					void store(Ex& rules, std::map<iterator, data>& data);
 					
 					// Check if rules are present
 					bool is_present(Ex& rules) const;
 					
 					// Retrieve properties from rules
-					void retrieve(Ex& rules,
-									  std::map<iterator, bool>& lhs_contains_dummies,
-									  std::map<iterator, bool>& rhs_contains_dummies) const;
+					void retrieve(Ex& rules, std::map<iterator, data>& data);
 					
 					// Count number of rules
 					size_t size() const;
@@ -84,7 +87,7 @@ namespace cadabra {
 				private:
 					// Map storing weak pointers to `Ex` and pairs of lhs/rhs maps as values
 					mutable LRUcache<std::weak_ptr<Ex>, 
-										std::pair< std::map<iterator, bool>, std::map<iterator, bool> >,
+										std::map<iterator, data>,
 										std::owner_less<std::weak_ptr<Ex>>
 										> properties;
 					// Max size of the rules list
