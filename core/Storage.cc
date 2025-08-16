@@ -514,23 +514,6 @@ namespace cadabra {
 		return seed;
 		}
 
-	bloom_filter Ex::calc_bloom_hash(iterator it, const bloom_parameters& parameters) const
-		{
-		// In matching algorithms, it is useful to have a quick negative.
-		// This algorithm computes a bloom hash for a subtree beginning at `it`.
-		// 
-		bloom_filter filter(parameters);
-
-		iterator end=it;
-		end.skip_children();
-		++end;
-		it.skip_children(false);
-
-		std::string token;
-		filter.insert("Hello");
-		return filter;
-		}
-
 	Ex::sibling_iterator Ex::arg(iterator it, unsigned int num)
 		{
 		if(*it->name=="\\comma") {

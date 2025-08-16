@@ -28,11 +28,6 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 
 	// Stopwatch sw;
 	// sw.start();
-	
-	// Initialize bloom filter parameters
-	bparameters.projected_element_count = 128; // estimate
-	bparameters.false_positive_probability = 0.01;
-	bparameters.compute_optimal_parameters();
 
 	// Check if args are present in global_rules
 	// bool skipchecks = k.replacement_rules->is_present(args);
@@ -53,9 +48,6 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 			sibling_iterator rhs=lhs;
 			rhs.skip_children();
 			++rhs;
-
-			bool lhs_contains_dummies_ = false;
-			bool rhs_contains_dummies_ = false;
 
 			if(*lhs->name=="") { // replacing a sub or superscript
 				lhs=tr.flatten_and_erase(lhs);
@@ -97,26 +89,23 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 				IndexClassifier ic(kernel);
 				IndexClassifier::index_map_t ind_free, ind_dummy;
 				ic.classify_indices(lhs, ind_free, ind_dummy);
-				// lhs_contains_dummies[arrow]= ind_dummy.size()>0;
-				lhs_contains_dummies_ = ind_dummy.size()>0;
+				lhs_contains_dummies[arrow]= ind_dummy.size()>0;
 				ind_free.clear();
 				ind_dummy.clear();
 				if(rhs!=tr.end()) {
 					ic.classify_indices(rhs, ind_free, ind_dummy);
-					// rhs_contains_dummies[arrow]=ind_dummy.size()>0;
-					rhs_contains_dummies_=ind_dummy.size()>0;
+					rhs_contains_dummies[arrow]=ind_dummy.size()>0;
 					}
-				rules_data[arrow] = {lhs_contains_dummies_, rhs_contains_dummies_, args.calc_bloom_hash(rhs, bparameters)};
 				}
 			catch(std::exception& er) {
 				throw ArgumentException(std::string("substitute: Index error in replacement rule. ")+er.what());
 				}
 			return true;
 			});
-		replacement_rules.store(args, rules_data);
+		replacement_rules.store(args, lhs_contains_dummies, rhs_contains_dummies);
 		}
 	else {
-		replacement_rules.retrieve(args, rules_data);
+		replacement_rules.retrieve(args, lhs_contains_dummies, rhs_contains_dummies);
 		}
 
 	// sw.stop();
@@ -126,13 +115,8 @@ substitute::substitute(const Kernel& k, Ex& tr, Ex& args_, bool partial)
 bool substitute::can_apply(iterator st)
 	{
 	// std::cerr << "attempting to match at " << st << std::endl;
-	bloom_filter st_filter1 = tr.calc_bloom_hash(st, bparameters);
 
 	Ex::iterator found = cadabra::find_in_list(args, args.begin(), [&](Ex::iterator arrow) {
-		// Quick bloom filter check
-		// if (!st_filter1.contains(std::get<2>(rules_data[arrow]))) return args.end();
-		// if (!st_filter1.contains(st_filter1)) return args.end();
-
 		comparator.clear();
 		iterator lhs=tr.begin(arrow);
 		if(*lhs->name=="\\conditional") {
@@ -147,8 +131,7 @@ bool substitute::can_apply(iterator st)
 			return args.end();
 
 		Ex_comparator::match_t ret;
-		// comparator.lhs_contains_dummies=lhs_contains_dummies[arrow];
-		comparator.lhs_contains_dummies=std::get<0>(rules_data[arrow]);
+		comparator.lhs_contains_dummies=lhs_contains_dummies[arrow];
 		// std::cerr << "lhs_contains_dummies " << comparator.lhs_contains_dummies << std::endl;
 
 		//	HERE: we need to have one entry point for matching, which dispatches depending
@@ -233,8 +216,7 @@ Algorithm::result_t substitute::apply(iterator& st)
 	IndexClassifier ic(kernel);
 	IndexClassifier::index_map_t ind_free, ind_dummy, ind_forced;
 
-	// if(rhs_contains_dummies[use_rule]) {
-	if (std::get<1>(rules_data[use_rule])) {
+	if(rhs_contains_dummies[use_rule]) {
 		ic.classify_indices(repl.begin(), ind_free, ind_dummy);
 		//std::cerr << "rhs contains dummies " << ind_dummy.size() << std::endl;
 		}
@@ -316,8 +298,7 @@ Algorithm::result_t substitute::apply(iterator& st)
 				multiply(it->multiplier, mt);
 				}
 			it->fl.bracket=remember_br;
-			// if(rhs_contains_dummies[use_rule])
-			if(std::get<1>(rules_data[use_rule]))
+			if(rhs_contains_dummies[use_rule])
 				ind_forced.insert(IndexClassifier::index_map_t::value_type(Ex(it), it));
 			++it;
 
@@ -502,7 +483,9 @@ size_t substitute::cache_size()
 	return replacement_rules.size();
 	}
 
-void substitute::Rules::store(Ex& rules, std::map<iterator, data>& data)
+void substitute::Rules::store(Ex& rules,
+								std::map<iterator, bool>& lhs_contains_dummies,
+								std::map<iterator, bool>& rhs_contains_dummies)
 	{
 	try {
 		// if number of stored rules has grown large, clean them up.
@@ -521,7 +504,7 @@ void substitute::Rules::store(Ex& rules, std::map<iterator, data>& data)
 
 		std::weak_ptr<Ex> rules_ptr = rules.shared_from_this();
 		// properties[rules_ptr] = { lhs_contains_dummies, rhs_contains_dummies };'
-		properties.insert(rules_ptr, data);
+		properties.insert(rules_ptr, { lhs_contains_dummies, rhs_contains_dummies });
 		// Mark this expression as cached; any change will remove that state
 		// and ensure that we do not use the cached expression later.
 		rules.update_state(result_t::l_cached);
@@ -531,11 +514,14 @@ void substitute::Rules::store(Ex& rules, std::map<iterator, data>& data)
 		}
 	}
 
-void substitute::Rules::retrieve(Ex& rules, std::map<iterator, data>& data)
+void substitute::Rules::retrieve(Ex& rules,
+								std::map<iterator, bool>& lhs_contains_dummies,
+								std::map<iterator, bool>& rhs_contains_dummies) const
 	{
 	// Rules::present is assumed to have been called to check that the rules are valid
 	std::weak_ptr<Ex> rules_ptr = rules.shared_from_this();
-	data = properties.at(rules_ptr);
+	lhs_contains_dummies = properties.at(rules_ptr).first;
+	rhs_contains_dummies = properties.at(rules_ptr).second;
 	}
 
 

@@ -35,7 +35,6 @@ You should have received a copy of the GNU General Public License
 
 #include "tree.hh"
 #include "Multiplier.hh"
-#include "bloom_filter.hpp"
 
 
 namespace cadabra {
@@ -258,9 +257,6 @@ namespace cadabra {
 
 			/// Calculate the hash value for the subtree starting at 'it'.
 			hashval_t    calc_hash(iterator it) const;
-
-			/// Calculate a bloom hash value for the subtree starting at 'it'.
-			bloom_filter    calc_bloom_hash(iterator it, const bloom_parameters& parameters) const;
 
 			/// Quick access to arguments or argument lists for A(B)(C,D) type nodes.
 			static sibling_iterator arg(iterator, unsigned int);
