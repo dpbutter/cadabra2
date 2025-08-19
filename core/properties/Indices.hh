@@ -5,7 +5,7 @@
 
 namespace cadabra {
 
-	class Indices : public list_property {
+	class Indices final : public list_property {
 		public:
 			Indices(); //const std::string& parent="");
 			virtual bool parse(Kernel&, std::shared_ptr<Ex>, keyval_t&) override;

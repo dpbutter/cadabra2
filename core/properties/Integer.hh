@@ -10,7 +10,7 @@ namespace cadabra {
 	/// Property indicating that a symbolic object always takes integer values.
 	/// Optionally takes a range over which it runs, which can be symbolic.
 
-	class Integer : public property {
+	class Integer final : public property {
 		public:
 			virtual ~Integer() {};
 			virtual std::string name() const override;

@@ -5,7 +5,7 @@
 
 namespace cadabra {
 
-	class LaTeXForm : virtual public property {
+	class LaTeXForm final : virtual public property {
 		public:
 			virtual std::string name() const override;
 			virtual bool parse(Kernel&, keyval_t&) override;

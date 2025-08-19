@@ -5,7 +5,7 @@
 
 namespace cadabra {
 
-	class KroneckerDelta : public TableauBase, virtual public property {
+	class KroneckerDelta final: public TableauBase, virtual public property {
 		public:
 			virtual ~KroneckerDelta() {};
 			virtual std::string name() const;

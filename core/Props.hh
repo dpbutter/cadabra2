@@ -454,6 +454,16 @@ namespace cadabra {
 					return *this;
 				}
 
+				self_type& to_proptype(std::type_index type) {
+					outer_it_ = typemap_->find(type);
+					if (outer_it_ == typemap_->end() || outer_it_->second.empty()) {
+						typemap_ = nullptr;
+					} else {
+						inner_it_ = outer_it_->second.begin();						
+					}
+					return *this;
+				}
+
 				self_type& next_prop() {
 					const property* this_prop = inner_it_->first;
 					while (typemap_ && inner_it_->first == this_prop) {
@@ -506,6 +516,7 @@ namespace cadabra {
 
 
 
+
 			};
 
 			typedef iterator_base<false> iterator;
@@ -526,7 +537,7 @@ namespace cadabra {
 				if (it == props_dict.end()) return const_iterator{true};
 				else return const_iterator(&(it->second));
 			}
-			
+
 			// Create iterator over all property/pattern pairs of a specific type
 			iterator begin(std::type_index type) {
 				auto it = pats_dict.find(type);
@@ -538,6 +549,18 @@ namespace cadabra {
 				if (it == pats_dict.end()) return const_iterator{true};
 				else return const_iterator(&(it->second));
 			}
+
+			// Create iterator over all property/pattern pairs of a specific type AND pattern matching name
+			iterator begin(nset_t::iterator name, std::type_index type) {
+				auto it = props_dict.find(name);
+				if (it == props_dict.end()) return iterator{true};
+
+				auto ret = iterator(&(it->second));
+
+
+
+			}
+
 
 			// Return pair corresponding to begin and end of a property range
 			std::pair<iterator, iterator> equal_range(const property *prop) {
@@ -615,13 +638,20 @@ namespace cadabra {
 			// second pass (optional): wildcards == true
 			auto walk = begin(it->name_only());
 			auto end_it = end();
+			if constexpr (std::is_final_v<T>) {
+				if (walk != end_it) {
+					walk.to_proptype(typeid(T));
+					end_it = walk;
+					if (end_it != end()) end_it.next_proptype();
+				}
+			}
 			std::type_index last_type = typeid(void);
 
 			// walk takes us through all properties that have patterns matching name
 			while (walk != end_it) {
 				// Upon (re)starting the loop, check whether the property type has changed.
 				// If it has, check castability and skip if not castable.
-				if (last_type != walk.proptype()) {
+				if (!std::is_final_v<T> && last_type != walk.proptype()) {
 					// This is the first time we are encountering this property type in the loop.
 					last_type = walk.proptype();
 					ret.first = dynamic_cast<const T *>(walk->first);
