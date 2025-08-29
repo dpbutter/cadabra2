@@ -514,6 +514,35 @@ namespace cadabra {
 		return seed;
 		}
 
+	hashval_t Ex::calc_hash2(iterator it, const Properties& props) const
+		{
+		iterator end=it;
+		end.skip_children();
+		++end;
+		it.skip_children(false);
+
+		hashval_t seed = 0;
+		while(it!=end) {
+			if (it->is_index()) {
+				// Store index only by index's set name and (possibly) position
+				const Indices *index_prop = props.get<Indices>(it, false);
+				if (index_prop) {
+					boost::hash_combine(seed, index_prop->set_name);
+					if (index_prop->position_type == Indices::position_t::independent) {
+						boost::hash_combine(seed, it->fl.parent_rel);
+					}
+				} else {
+					boost::hash_combine(seed, *it->name);
+				}
+			} else {
+				boost::hash_combine(seed, *it->name);
+			}
+			++it;
+			}
+
+		return seed;
+		}
+
 	Ex::sibling_iterator Ex::arg(iterator it, unsigned int num)
 		{
 		if(*it->name=="\\comma") {

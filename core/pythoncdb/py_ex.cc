@@ -747,6 +747,7 @@ namespace cadabra {
 //            return result.cast<Ex>();
 //			})
 		.def("__hash__", [](const Ex& ex) { return ex.calc_hash(ex.begin()); })
+		.def("__hash2__", [](const Ex& ex) { return ex.calc_hash2(ex.begin(), get_kernel_from_scope()->properties); })
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const ExNode)>(&Ex_add), py::is_operator{})
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const Ex_ptr)>(&Ex_add), py::is_operator{})
 		.def("__sub__", static_cast<Ex_ptr(*)(const Ex_ptr, const ExNode)>(&Ex_sub), py::is_operator{})
