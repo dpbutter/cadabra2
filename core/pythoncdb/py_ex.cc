@@ -32,6 +32,7 @@
 
 #include <ios>
 #include <iomanip>
+#include "Hash.hh"
 
 // #define DEBUG 1
 
@@ -666,6 +667,59 @@ namespace cadabra {
 		return apply_algo_preorder<map_sympy, std::string, std::vector<std::string>>(ex, head, av, false, false, 0);
 		}
 
+	Ex_hasher::result_t Ex_hasher(
+			Ex_ptr ex,
+			bool ignore_top_multiplier,
+			bool ignore_multiplier,
+			bool ignore_product_order,
+			bool ignore_sum_order,
+			bool ignore_index_order,
+			bool ignore_parent_rel,
+			bool ignore_bracket_type,
+			bool ignore_children,
+			bool ignore_names,
+			bool ignore_indices,
+			bool ignore_child_order) {
+				
+		HashFlags flags = HashFlags::HASH_DEFAULT;
+		// Add flags
+		if (ignore_top_multiplier) {
+			flags |= HashFlags::HASH_IGNORE_TOP_MULTIPLIER;
+		}
+		if (ignore_multiplier) {
+			flags |= HashFlags::HASH_IGNORE_MULTIPLIER;
+		}
+		if (ignore_product_order) {
+			flags |= HashFlags::HASH_IGNORE_PRODUCT_ORDER;
+		}
+		if (ignore_sum_order) {
+			flags |= HashFlags::HASH_IGNORE_SUM_ORDER;
+		}
+		if (ignore_index_order) {
+			flags |= HashFlags::HASH_IGNORE_INDEX_ORDER;
+		}
+		if (ignore_parent_rel) {
+			flags |= HashFlags::HASH_IGNORE_PARENT_REL;
+		}
+		if (ignore_bracket_type) {
+			flags |= HashFlags::HASH_IGNORE_BRACKET_TYPE;
+		}
+		if (ignore_children) {
+			flags |= HashFlags::HASH_IGNORE_CHILDREN;
+		}
+		if (ignore_names) {
+			flags |= HashFlags::HASH_IGNORE_NAMES;
+		}
+		if (ignore_indices) {
+			flags |= HashFlags::HASH_IGNORE_INDICES;
+		}
+		if (ignore_child_order) {
+			flags |= HashFlags::HASH_IGNORE_CHILD_ORDER;
+		}
+
+		return hash_ex(ex->begin(), flags);
+	}
+
 	void init_ex(py::module& m)
 		{
 		pybind11::enum_<str_node::parent_rel_t>(m, "parent_rel_t")
@@ -746,6 +800,20 @@ namespace cadabra {
 //            return result.cast<Ex>();
 //			})
 		.def("__hash__", [](const Ex& ex) { return ex.calc_hash(ex.begin()); })
+		.def("hasher",
+				&Ex_hasher, 
+				pybind11::arg("ignore_top_multiplier") = false,
+				pybind11::arg("ignore_multiplier") = false,
+				pybind11::arg("ignore_product_order") = false,
+				pybind11::arg("ignore_sum_order") = false,
+				pybind11::arg("ignore_index_order") = false,
+				pybind11::arg("ignore_parent_rel") = false,
+				pybind11::arg("ignore_bracket_type") = false,
+				pybind11::arg("ignore_children") = false,
+				pybind11::arg("ignore_names") = false,
+				pybind11::arg("ignore_indices") = false,
+				pybind11::arg("ignore_child_order") = false
+			)
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const ExNode)>(&Ex_add), py::is_operator{})
 		.def("__add__", static_cast<Ex_ptr(*)(const Ex_ptr, const Ex_ptr)>(&Ex_add), py::is_operator{})
 		.def("__sub__", static_cast<Ex_ptr(*)(const Ex_ptr, const ExNode)>(&Ex_sub), py::is_operator{})

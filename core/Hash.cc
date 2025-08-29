@@ -1,4 +1,5 @@
 #include "Hash.hh"
+#include <algorithm>
 
 // Based on boost's implementation of hash_combine
 // <https://www.boost.org/doc/libs/1_54_0/doc/html/hash/reference.html#boost.hash_combine>
@@ -58,16 +59,21 @@ namespace cadabra
 			hash_combine(seed, do_hash((it->fl.parent_rel + 1) << 8));
 
 		if (!flag_set(HASH_IGNORE_CHILDREN) && it.number_of_children() > 0) {
-
+			// FIXME(Dan): Possible bug in ignore_child_order not looking at non-index children
 			if (
 				flag_set(HASH_IGNORE_CHILD_ORDER) ||
 				(flag_set(HASH_IGNORE_SUM_ORDER) && *it->name == "\\sum") ||
 				(flag_set(HASH_IGNORE_PRODUCT_ORDER) && *it->name == "\\prod")) {
-				std::set<size_t> hashes;
+				// FIXME(Dan): Set eliminates duplicates, which is probably NOT what we want.
+				// std::set<size_t> hashes;
+				std::vector<size_t> hashes;
 				for (Ex::sibling_iterator beg = it.begin(), end = it.end(); beg != end; ++beg) {
-					if (!flag_set(HASH_IGNORE_INDICES) && beg->is_index())
-						hashes.insert(hash(beg, false));
+					if (!flag_set(HASH_IGNORE_INDICES) && beg->is_index()) {
+						// hashes.insert(hash(beg, false));
+						hashes.push_back(hash(beg, false));
+					}
 				}
+				std::sort(hashes.begin(), hashes.end());
 				for (size_t hash : hashes)
 					hash_combine(seed, hash);
 			}
@@ -80,13 +86,17 @@ namespace cadabra
 					}
 				}
 				else if (flag_set(HASH_IGNORE_INDEX_ORDER)) {
-					std::set<size_t> hashes;
+					// std::set<size_t> hashes;
+					std::vector<size_t> hashes;
 					for (Ex::sibling_iterator beg = it.begin(), end = it.end(); beg != end; ++beg) {
-						if (beg->is_index())
-							hashes.insert(hash(beg, false));
+						if (beg->is_index()) {
+							// hashes.insert(hash(beg, false));
+							hashes.push_back(hash(beg, false));
+						}
 						else
 							hash_combine(seed, hash(beg, false));
 					}
+					std::sort(hashes.begin(), hashes.end());
 					for (size_t hash : hashes)
 						hash_combine(seed, hash);
 				}
