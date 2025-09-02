@@ -24,13 +24,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <map>
+#include <set>
 #include <list>
 #include <type_traits>
 #include "Storage.hh"
 #include <typeindex>
 #include <iterator>
 #include <functional>
-
 #include <cassert>
 
 namespace cadabra {
@@ -66,7 +66,41 @@ namespace cadabra {
 			bool match_ext(const Properties&, const Ex::iterator&, Ex_comparator& comp, bool ignore_parent_rel=false, bool ignore_properties=false) const;
 
 			Ex obj;
+			size_t id;
 		};
+
+	class PatternRegistry {
+		public:
+			PatternRegistry() : version_(0) {}
+			~PatternRegistry() {
+				clear();
+			}
+			// Return a new pattern or the pattern that matches pat
+			std::pair<const pattern*, size_t> insert_pattern(const Ex& ex);
+			std::pair<const pattern*, size_t> insert_pattern(std::shared_ptr<Ex> ex);
+			size_t size() const;
+			void clear();
+			const pattern* get_pattern_by_id(size_t id) const;
+			std::vector<Ex> list_patterns() const;
+
+		private:
+			uint64_t version_;
+			void bump_version() {
+				version_++;
+			}
+			struct pattern_is_less {
+				bool operator()(const pattern* p1, const pattern* p2 ) const;
+			};
+			struct pattern_is_equal {
+				bool operator()(const pattern* p1, const pattern* p2 ) const;
+			};
+			
+    		std::vector<const pattern*>                         registry_;
+			std::map<const pattern*, size_t, pattern_is_less>   registry_map_;
+
+	};
+
+
 
 	/// Arguments to properties get parsed into a keyval_t structure.
 
@@ -288,7 +322,7 @@ namespace cadabra {
 
 			registered_property_map_t     registered_properties;
 			// typedef std::pair<pattern *, const property *>  pat_prop_pair_t;
-			typedef std::pair<const property * const, pattern *>  prop_pat_pair_t;
+			typedef std::pair<const property * const, const pattern *>  prop_pat_pair_t;
 
 			// Register a type by template. Usage: `register_property_type<T>();`
 			// Just calls `registered_properties.register_type<T>()`
@@ -325,12 +359,14 @@ namespace cadabra {
 			// property_map_t  props;  // pattern -> property
 			// pattern_map_t   pats;   // property -> pattern; for list properties, patterns are stored here in order
 
-			typedef std::multimap<const property *, pattern *>				propmap_t;
-			typedef std::map<std::type_index, propmap_t>				    typemap_t;
-			typedef std::map<nset_t::iterator, typemap_t, nset_it_less>		namemap_t;
+			typedef std::multimap<const property*, const pattern*>          propmap_t;
+			typedef std::map<std::type_index, propmap_t>                    typemap_t;
+			typedef std::map<nset_t::iterator, typemap_t, nset_it_less>     namemap_t;
 
 			typemap_t  pats_dict;
 			namemap_t  props_dict;
+
+			PatternRegistry pattern_registry;
 
 			/// Normal search: given a pattern, get its property if any.
 			template<class T> const T*  get(Ex::iterator, bool ignore_parent_rel=false) const;
@@ -378,7 +414,7 @@ namespace cadabra {
 			/// Erases property completely.
 			void erase(const property*);
 			/// Erases pattern from a given property, leaving other patterns alone.
-			void erase(const property*, pattern*);
+			void erase(const property*, const pattern*);
 
 			/// Helper function to lookup all patterns associated with a property.
 			/// If the property is invalid, it returns a null pointer in the first slot.
@@ -881,9 +917,6 @@ namespace cadabra {
 			}
 		return dn;
 		}
-
-
-
 
 
 

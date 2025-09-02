@@ -491,12 +491,29 @@ namespace cadabra {
 		return ic.get_dummy(indices, ex->begin());
 	}
 
+	/*
+	void register_pattern(Ex_ptr ex) {
+		Kernel* k = get_kernel_from_scope();
+		k->pattern_registry.insert_pattern(ex);
+	}
+	*/
+
+	std::vector<Ex> list_patterns() {
+		Kernel* k = get_kernel_from_scope();
+		return k->properties.pattern_registry.list_patterns();
+	}
+
+
+
 	void init_properties(py::module& m)
 		{
 
 		m.def("properties", &list_properties);
 		m.def("properties_old", &list_properties_old);
 		m.def("properties_dict", &properties_dict);
+
+		// m.def("register_pattern", &register_pattern);
+		m.def("list_patterns", &list_patterns);
 
 		py::class_<BoundPropertyBase, std::shared_ptr<BoundPropertyBase>>(m, "Property")
 			.def_property_readonly("for_obj", &BoundPropertyBase::get_ex);
