@@ -258,7 +258,7 @@ namespace cadabra {
 
 			/// Calculate the hash value for the subtree starting at 'it'.
 			hashval_t    calc_hash(iterator it) const;
-			hashval_t    calc_hash2(iterator it, const Properties& props) const;
+			static hashval_t    calc_hash(iterator it, const Properties& props);
 
 			/// Quick access to arguments or argument lists for A(B)(C,D) type nodes.
 			static sibling_iterator arg(iterator, unsigned int);

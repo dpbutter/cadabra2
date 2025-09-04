@@ -31,6 +31,7 @@ Kernel::Kernel(bool inject_defaults)
 	, display_fractions(false)
 	, warning_level(warn_t::warning)
 	, warning_callback(nullptr)
+	, tracker(&properties)
 	{
 	if (inject_defaults) {
 		inject_property(new Distributable(),          ex_from_string("\\prod{#}"), 0);

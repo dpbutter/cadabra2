@@ -3,7 +3,7 @@
 
 #include <functional>
 #include "Props.hh"
-
+#include "PatternTracker.hh"
 /// \ingroup core
 ///
 /// Cadabra kernel that keeps all state information that needs to be passed
@@ -26,8 +26,8 @@ namespace cadabra {
 			std::shared_ptr<Ex> ex_from_string(const std::string&);
 
 			
-			Properties properties;
-
+			Properties     properties;
+			PatternTracker tracker;
 			/// Settings.
 			enum class scalar_backend_t { sympy, mathematica } scalar_backend;
 			bool                                               call_embedded_python_functions;

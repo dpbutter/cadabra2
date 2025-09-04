@@ -514,7 +514,7 @@ namespace cadabra {
 		return seed;
 		}
 
-	hashval_t Ex::calc_hash2(iterator it, const Properties& props) const
+	hashval_t Ex::calc_hash(iterator it, const Properties& props)
 		{
 		iterator end=it;
 		end.skip_children();

@@ -94,10 +94,9 @@ namespace cadabra {
 			struct pattern_is_equal {
 				bool operator()(const pattern* p1, const pattern* p2 ) const;
 			};
-			
-    		std::vector<const pattern*>                         registry_;
-			std::map<const pattern*, size_t, pattern_is_less>   registry_map_;
 
+    		std::vector<const pattern*>                          registry_;
+			std::map<const pattern*, size_t, pattern_is_less>    registry_map_;
 	};
 
 
@@ -279,7 +278,7 @@ namespace cadabra {
 
 	class Properties {
 		public:
-	
+
 			// Class to store names and std::type_index for property objects
 			class registered_property_map_t {
 				public:
@@ -368,7 +367,6 @@ namespace cadabra {
 
 			PatternRegistry pattern_registry;
 
-			/// Normal search: given a pattern, get its property if any.
 			template<class T> const T*  get(Ex::iterator, bool ignore_parent_rel=false) const;
 			template<class T> const T*  get(Ex::iterator, int& serialnum, bool doserial=true, bool ignore_parent_rel=false) const;
 			/// Ditto for labelled properties

@@ -186,10 +186,27 @@ bool PatternRegistry::pattern_is_less::operator()(const pattern* p1, const patte
 	return subtree_compare(nullptr, p1->obj.begin(), p2->obj.begin()) > 0;
 }
 bool PatternRegistry::pattern_is_equal::operator()(const pattern* p1, const pattern* p2 ) const {
-		return subtree_compare(nullptr, p1->obj.begin(), p2->obj.begin()) == 0;
+	return subtree_compare(nullptr, p1->obj.begin(), p2->obj.begin()) == 0;
 }
 
-
+/*
+size_t Properties::Hash::operator()(Ex::pre_order_iterator it) {
+	return Ex::calc_hash(it, *props);
+}
+bool Properties::Equal::operator()(Ex::pre_order_iterator it1, Ex::pre_order_iterator it2) {
+	static Ex_comparator comp(*props);
+	comp.clear();
+	auto ret = comp.equal_subtree(it1, it2);
+	switch (ret) {
+		case Ex_comparator::match_t::subtree_match:
+		case Ex_comparator::match_t::match_index_less:
+		case Ex_comparator::match_t::match_index_greater:
+			return true;
+		default:
+			return false;
+	}
+}
+*/
 
 
 bool Properties::has(const property *pb, Ex::iterator it)
