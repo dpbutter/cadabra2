@@ -35,6 +35,7 @@ You should have received a copy of the GNU General Public License
 
 #include "tree.hh"
 #include "Multiplier.hh"
+#include <unordered_set>
 
 
 namespace cadabra {
@@ -54,6 +55,8 @@ namespace cadabra {
 
 	extern nset_t name_set;
 	extern rset_t rat_set;
+
+	typedef size_t   patternId_t;
 
 	/// \ingroup core
 	///
@@ -87,7 +90,8 @@ namespace cadabra {
 			// the tree. If there is nothing, the std::monostate is set.
 			std::variant<std::monostate,
 							 std::shared_ptr<NTensor>,
-							 std::shared_ptr<NInterpolatingFunction>
+							 std::shared_ptr<NInterpolatingFunction>,
+							 patternId_t
 							 > content;
 
 #ifdef _WIN32
@@ -337,13 +341,13 @@ namespace cadabra {
 			/// expression.
 			int  history_size() const;
 
+			using node_t = tree_node;
 		private:
 			result_t state_;
 
 			std::vector<cdb_tree> history;
 			/// Patterns which describe how to get from one history step to the next.
-			std::vector<std::vector<Ex::path_t> > terms;
-		};
+			std::vector<std::vector<Ex::path_t> > terms;		};
 
 
 	/// \ingroup core

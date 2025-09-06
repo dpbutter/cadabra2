@@ -55,7 +55,9 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
     message(STATUS "This version of g++ (${CMAKE_CXX_COMPILER_VERSION}) incorrectly warns about possibly uninitialised memory when using std::variant containing a std::shared_ptr. Disabling this warning.")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
   endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fno-omit-frame-pointer \
+            -fsanitize=address,undefined")
+	    #            -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC")
 endif()
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")

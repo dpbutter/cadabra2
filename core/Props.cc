@@ -207,6 +207,16 @@ bool Properties::Equal::operator()(Ex::pre_order_iterator it1, Ex::pre_order_ite
 	}
 }
 */
+bool Properties::pattern_equal(const Ex::iterator& a, const Ex::iterator& b) const {
+	// FIXME
+	// static Ex_comparator comp(*this);
+	Ex_comparator comp(*this);
+	comp.clear();
+	auto r = comp.equal_subtree(a, b);
+	return r == Ex_comparator::match_t::subtree_match
+		|| r == Ex_comparator::match_t::match_index_less
+		|| r == Ex_comparator::match_t::match_index_greater;
+}
 
 
 bool Properties::has(const property *pb, Ex::iterator it)
@@ -237,6 +247,8 @@ bool Properties::has(const property *pb, Ex::iterator it)
 
 void Properties::clear()
 	{
+	tracked_patterns.clear();	
+
 	// Clear all properties
 	for (const auto& [_, this_pats] : pats_dict) {
 		auto it=this_pats.begin();
@@ -254,6 +266,8 @@ void Properties::clear()
 
 	props_dict.clear();
 	pats_dict.clear();
+
+	// Below handles actual pattern deletions
 	pattern_registry.clear();
 	}
 
@@ -893,4 +907,14 @@ std::pair<const property*, std::vector<const pattern*> > Properties::lookup_prop
 		break;
 	}
 	return ret;
+}
+
+std::pair<Ex::iterator, const pattern*> Properties::track_pattern(std::shared_ptr<Ex> ex) {
+	return track_pattern(*ex);
+}
+
+std::pair<Ex::iterator, const pattern*> Properties::track_pattern(const Ex& ex) {
+	auto pair = pattern_registry.insert_pattern(ex);
+	auto res = tracked_patterns.emplace(pair.first->obj.begin(), pair.first);
+	return *(res.first);
 }

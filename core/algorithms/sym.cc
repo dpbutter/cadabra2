@@ -212,7 +212,8 @@ Algorithm::result_t sym::doit(iterator& it, bool sign)
 			}
 
 		// All replacement rules now figured out, let's do them.
-		std::map<iterator, iterator>::iterator rit=replacement_map.begin();
+		// std::map<iterator, iterator>::iterator rit=replacement_map.begin();
+		auto rit=replacement_map.begin();
 		while(rit!=replacement_map.end()) {
 			str_node::bracket_t cbr=rit->first->fl.bracket;
 			iterator repl=copytree.replace(rit->first, rit->second);

@@ -316,6 +316,13 @@ namespace cadabra {
 			/// list_property, ownership of the property gets transferred to
 			/// this class.
 			
+
+			Properties() : tracked_patterns{0, Hash{this}, Equal{this}} {}
+			~Properties() {
+				clear();
+			}
+
+
 			// FIXME: register_property does not seem to be used.
 			void                          register_property(property* (*)(), const std::string& name);
 
@@ -330,8 +337,6 @@ namespace cadabra {
 			// Register the type of an object. Usage: `register_property_type(prop);`
 			// Just calls `registered_properties.register_type(obj)`
 			void       register_property_type(const property* prop);
-
-
 
 			/// We keep two multi-maps: one from the pattern to the property (roughly) and
 			/// one from the property to the pattern. These are both multi-maps because
@@ -366,6 +371,32 @@ namespace cadabra {
 			namemap_t  props_dict;
 
 			PatternRegistry pattern_registry;
+
+			size_t pattern_hash(const Ex::iterator& it) const noexcept {
+				return Ex::calc_hash(it, *this);
+			}
+
+			bool pattern_equal(const Ex::iterator& a, const Ex::iterator& b) const;
+			struct Hash {
+				const Properties* self{};
+				size_t operator()(const Ex::iterator& k) const noexcept { 
+					return self->pattern_hash(k); 
+					// return std::hash<void*>{}(k.node);  // Use pointer hash of the node
+				}
+			};
+			struct Equal {
+				const Properties* self{};
+				bool operator()(const Ex::iterator& a, const Ex::iterator& b) const { 
+					return self->pattern_equal(a, b); 
+					// return a == b;  // Use iterator equality
+				}
+			};
+
+
+			std::unordered_map<Ex::iterator, const pattern*, Hash, Equal> tracked_patterns;
+
+			std::pair<Ex::iterator, const pattern*> track_pattern(const Ex&);
+			std::pair<Ex::iterator, const pattern*> track_pattern(std::shared_ptr<Ex> ex);
 
 			template<class T> const T*  get(Ex::iterator, bool ignore_parent_rel=false) const;
 			template<class T> const T*  get(Ex::iterator, int& serialnum, bool doserial=true, bool ignore_parent_rel=false) const;

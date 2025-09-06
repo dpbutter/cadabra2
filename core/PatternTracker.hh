@@ -2,42 +2,33 @@
 
 #include "Props.hh"
 #include "Compare.hh"
+#include "Storage.hh"
 
 namespace cadabra {
 
-    class PatternTracker {
-        public:
-            PatternTracker(Properties* p) : props(p) {}
-
-            struct Hash {
-                Properties* p;
-                Hash(Properties* props) : p(props) {}
-                size_t operator()(Ex::iterator it) {
-                    return Ex::calc_hash(it, *p);
-                }
-            };
-
-            struct Equal {
-                Properties* p;
-                Equal(Properties* props) : p(props) {}
-                bool operator()(Ex::iterator it1, Ex::iterator it2) {
-                    static Ex_comparator comp(*p);
-                    comp.clear();
-                    auto ret = comp.equal_subtree(it1, it2);
-                    switch (ret) {
-                        case Ex_comparator::match_t::subtree_match:
-                        case Ex_comparator::match_t::match_index_less:
-                        case Ex_comparator::match_t::match_index_greater:
-                            return true;
-                        default:
-                            return false;
-                    }
-                }
-            };
-
-//            std::unordered_map<Ex::pre_order_iterator, const pattern*, Hash, Equal> tracked_patterns;
-
+    class Tracker {
         private:
             Properties* props;
+			std::map<patternId_t, std::unordered_set<Ex::node_t*>> map_;
+
+        public:
+            Tracker(Properties* p) : props(p) {}
+            
+            void track_node(Ex::node_t* node) {
+                if (auto id = std::get_if<patternId_t>( &(node->data.content)) ) {
+                    map_[*id].insert(node);
+                }
+            }
+
+            // FIXME: const?
+            std::unordered_set<Ex::node_t*>* get_nodes(patternId_t id) {
+                auto it = map_.find(id);
+                if (it == map_.end()) {
+                    return nullptr;
+                } else {
+                    return &(it->second);
+                }
+            }
+
     };
 }
