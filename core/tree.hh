@@ -51,13 +51,26 @@ template <class T, class tree_node_allocator>
 class Nodemap;
 
 
-// Type trait to detect if T has label() method
+// Type traits to detect if T has label() method and what the return type is
 template<typename T, typename = void>
 struct has_label : std::false_type {};
 
 template<typename T>
 struct has_label<T, std::void_t<decltype(std::declval<T>().label())>> 
     : std::true_type {};
+
+template<typename T, typename = void>
+struct label_type {
+    using type = size_t;  // default type
+};
+
+template<typename T>
+struct label_type<T, std::void_t<decltype(std::declval<T>().label())>> {
+    using type = decltype(std::declval<T>().label());
+};
+
+template<typename T>
+using label_t = typename label_type<T>::type;
 
 
 
@@ -82,18 +95,17 @@ class tree_node_ { // size: 5*4=20 bytes (on 32 bit arch), can be reduced by 8.
 			}
 		}
 		
-		size_t label() const {
+		label_t<T> label() const {
 			if constexpr (has_label<T>::value) {
 				return data.label();
 			} else {
-				return size_t{0};
+				return label_t<T>{0};
 			}
 		}
 		
-		void set_label(size_t label) {
-			return data.set_label(label);
-		}
 }; 
+
+
 
 template<class T>
 tree_node_<T>::tree_node_()
@@ -216,7 +228,7 @@ class tree {
 				bool    operator==(const pre_order_iterator&) const;
 				bool    operator!=(const pre_order_iterator&) const;
 				pre_order_iterator&  operator++();
-			   pre_order_iterator&  operator--();
+				pre_order_iterator&  operator--();
 				pre_order_iterator   operator++(int);
 				pre_order_iterator   operator--(int);
 				pre_order_iterator&  operator+=(unsigned int);
@@ -236,7 +248,7 @@ class tree {
 				bool    operator==(const post_order_iterator&) const;
 				bool    operator!=(const post_order_iterator&) const;
 				post_order_iterator&  operator++();
-			   post_order_iterator&  operator--();
+				post_order_iterator&  operator--();
 				post_order_iterator   operator++(int);
 				post_order_iterator   operator--(int);
 				post_order_iterator&  operator+=(unsigned int);
@@ -282,7 +294,7 @@ class tree {
 				bool    operator==(const fixed_depth_iterator&) const;
 				bool    operator!=(const fixed_depth_iterator&) const;
 				fixed_depth_iterator&  operator++();
-			   fixed_depth_iterator&  operator--();
+				fixed_depth_iterator&  operator--();
 				fixed_depth_iterator   operator++(int);
 				fixed_depth_iterator   operator--(int);
 				fixed_depth_iterator&  operator+=(unsigned int);
@@ -318,25 +330,25 @@ class tree {
 				void set_parent_();
 		};
 
-      /// Iterator which traverses only the leaves.
-      class leaf_iterator : public iterator_base {
-         public:
-            leaf_iterator();
-            leaf_iterator(tree_node *, tree_node *top=0);
-            leaf_iterator(const sibling_iterator&);
-            leaf_iterator(const iterator_base&);
+		/// Iterator which traverses only the leaves.
+		class leaf_iterator : public iterator_base {
+			public:
+			leaf_iterator();
+			leaf_iterator(tree_node *, tree_node *top=0);
+			leaf_iterator(const sibling_iterator&);
+			leaf_iterator(const iterator_base&);
 
-            bool    operator==(const leaf_iterator&) const;
-            bool    operator!=(const leaf_iterator&) const;
-            leaf_iterator&  operator++();
-            leaf_iterator&  operator--();
-            leaf_iterator   operator++(int);
-            leaf_iterator   operator--(int);
-            leaf_iterator&  operator+=(unsigned int);
-            leaf_iterator&  operator-=(unsigned int);
+			bool    operator==(const leaf_iterator&) const;
+			bool    operator!=(const leaf_iterator&) const;
+			leaf_iterator&  operator++();
+			leaf_iterator&  operator--();
+			leaf_iterator   operator++(int);
+			leaf_iterator   operator--(int);
+			leaf_iterator&  operator+=(unsigned int);
+			leaf_iterator&  operator-=(unsigned int);
 			private:
 				tree_node *top_node;
-      };
+		};
 
 		/// Return iterator to the beginning of the tree.
 		inline pre_order_iterator   begin() const;
@@ -572,7 +584,7 @@ class tree {
 		void head_initialise_();
 		void copy_(const tree<T, tree_node_allocator>& other);
 
-      /// Comparator class for two nodes of a tree (used for sorting and searching).
+		/// Comparator class for two nodes of a tree (used for sorting and searching).
 		template<class StrictWeakOrdering>
 		class compare_nodes {
 			public:
@@ -3687,12 +3699,13 @@ typename tree<T, tree_node_allocator>::leaf_iterator& tree<T, tree_node_allocato
    }
 
 
-
+// The labeller for the subtrees is defined and owned by the caller.
 template <class T>
 class SubtreeLabeller {
 public:
     virtual ~SubtreeLabeller() = default;
-    virtual size_t get_label(tree_node_<T>* n) const = 0;
+    virtual label_t<T> get_label(tree_node_<T>* n) const = 0;
+    virtual label_t<T> label(tree_node_<T>* n) = 0;
 };
 
 
@@ -3731,10 +3744,12 @@ class Nodemap {
         Nodemap(tree<T,tree_node_allocator>* tr_ptr, SubtreeLabeller<T>* stl = nullptr) : tr_ptr_(tr_ptr), subtree_labeller_(stl) {build();}
 
         void build();
-        void map_subtree(post_order_iterator);
+        void map_subtree(post_order_iterator, bool relabel=true);
         void unmap_subtree(post_order_iterator);
-        void map_node(tree_node_t*, size_t);
+        void map_node(tree_node_t*, size_t, bool relabel=true);
         void unmap_node(tree_node_t*, size_t);
+		void relabel_remap_ancestors(tree_node_t* node);
+
         void cleanup();
 
     private:
@@ -3773,7 +3788,7 @@ bool tree<T, tree_node_allocator>::is_mapped()
 
 // Builds (or rebuilds) a node map
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::build() 
+void Nodemap<T, tree_node_allocator>::build()
     {
     // Clear the node map, so that we can use `build` to rebuild
     map_.clear();
@@ -3783,7 +3798,10 @@ void Nodemap<T, tree_node_allocator>::build()
 
 // Add a node to the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_node(tree_node_t* node, size_t node_depth) {
+void Nodemap<T, tree_node_allocator>::map_node(tree_node_t* node, size_t node_depth, bool relabel) {
+	if (relabel) {
+		subtree_labeller_->label(node);
+	}
     if ( node->is_labelled() ) {
         node_sets_t &node_sets = map_[node->label()];
         if (node_sets.size() < node_depth+1) {
@@ -3795,18 +3813,47 @@ void Nodemap<T, tree_node_allocator>::map_node(tree_node_t* node, size_t node_de
 
 // Add a subtree to the nodemap
 template <class T, class tree_node_allocator>
-void Nodemap<T, tree_node_allocator>::map_subtree(post_order_iterator it) {
+void Nodemap<T, tree_node_allocator>::map_subtree(post_order_iterator it, bool relabel) {
 	auto start_node = it.node;
-    // Add subtree root to node map
-    map_node(it.node, tr_ptr_->depth(it));
     // push post_order iterator all the way to the first leaf node
     it.descend_all();
     // Process all subtree elements until we return to root
     while (it.node != start_node) {
-	    map_node(it.node, tr_ptr_->depth(it));
+	    map_node(it.node, tr_ptr_->depth(it), relabel);
 	    ++it;
     }
+	// Add subtree root to node map
+    map_node(start_node, tr_ptr_->depth(it), relabel);
 }
+
+
+// Relabel and remap all ancestors of a node
+template <class T, class tree_node_allocator>
+void Nodemap<T, tree_node_allocator>::relabel_remap_ancestors(tree_node_t* node) {
+	while (node->parent != nullptr) {
+		node = node->parent;
+		size_t node_depth = tr_ptr_->depth(node);
+		label_t<T> old_label = node->label();
+		label_t<T> &new_label = subtree_labeller_->label(node);
+		if (old_label != new_label) {
+			if (old_label != label_t<T>{0}) {
+				map_[old_label][node_depth].erase(node);
+			}
+			if (new_label != label_t<T>{0}) {
+				node_sets_t &node_sets = map_[new_label];
+				if (node_sets.size() < node_depth+1) {
+		            node_sets.resize(node_depth+1);
+		        }
+				map_[new_label][node_depth].insert(node);
+			}
+		} 
+		// TODO: We might be able to break early under certain conditions...
+		// else {
+			// break;
+		// }
+	}
+}
+
 
 // Remove a node from the nodemap
 template <class T, class tree_node_allocator>
